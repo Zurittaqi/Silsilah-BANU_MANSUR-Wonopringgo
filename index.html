@@ -27,8 +27,6 @@
     --sidebar-text:#D9CFC0;
     --sidebar-text-dim:#8FADA6;
     --teal-light-grad:linear-gradient(135deg,#F6FFFB,#DFF6EE,#C5EEDC,#A8DFC7);
-    --jingga-tua:#C1440E;
-    --jingga-tua-dark:#9C360A;
     --radius:10px;
     --shadow:0 1px 2px rgba(43,38,32,.06), 0 4px 14px rgba(43,38,32,.06);
   }
@@ -90,8 +88,6 @@
     padding:8px 20px; display:flex; flex-direction:column;
   }
   .toolbar-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-  .toolbar-row-1{ /* container-type dihapus: memicu stacking context baru yang membuat popup Aksi tertimpa konten */ }
-  .toolbar-row-2{padding-top:3px; min-height:0;}
   .toolbar-row-2{
     background:#FBFFFE; padding:6px 14px; border-radius:999px;
     width:fit-content; max-width:100%; border:1px solid var(--line);
@@ -412,11 +408,12 @@
     padding:10px 6px;
   }
   .sidebar-resizer{display:none;}
-  .body{grid-template-columns:96px 6px 1fr !important;}
+  .body{grid-template-columns:96px 6px calc(100vw - 102px); !important;}
   .tree-children{margin-left:8px; padding-left:1px;}
   .tree-name{font-size:11px;}
   .tree-badge{display:none;}
 }
+  }
 </style>
 </head>
 <body>
