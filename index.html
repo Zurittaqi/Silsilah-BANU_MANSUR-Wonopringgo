@@ -310,6 +310,7 @@
     background:var(--paper-card); border-radius:14px; width:340px; max-width:88%;
     max-height:82%; box-shadow:0 20px 50px rgba(20,46,42,.3);
     display:flex; flex-direction:column; overflow:hidden;
+    container-type:inline-size; container-name:panelbox;
   }
   .panel-header{
     padding:18px; display:flex; gap:12px; align-items:center; border-bottom:1px solid var(--line);
@@ -327,6 +328,15 @@
     padding:4px 7px; width:58%; text-align:right; background:#fff; color:var(--ink);
   }
   .panel-footer{padding:12px 18px; display:flex; gap:8px; justify-content:flex-end; border-top:1px solid var(--line); flex-shrink:0;}
+
+  /* Tombol fleksibel: teks penuh normalnya, menyusut jadi 1 huruf saat panel/kartu menyempit */
+  .btn-flex{flex-shrink:1; min-width:36px; justify-content:center;}
+  .btn-flex .btn-short{display:none;}
+  @container panelbox (max-width: 300px){
+    .btn-flex .btn-full{display:none;}
+    .btn-flex .btn-short{display:inline;}
+    .btn-flex{padding:8px 10px;}
+  }
 
   /* ===== TAMBAHAN: klik nama, NRB, alamat ===== */
   .content-heading h2{cursor:pointer;}
@@ -1183,7 +1193,7 @@ function openDetail(id){
       <div class="panel-section-title">Data Diri</div>
       <div class="panel-row"><span>Jenis kelamin</span><span>${p.gender==='L'?'Laki-laki':'Perempuan'}</span></div>
       <div class="panel-row"><span>Tanggal Lahir</span><span>${p.birth}</span></div>
-      <div class="panel-row"><span>Tahun wafat</span><span>${p.death||'—'}</span></div>
+      <div class="panel-row"><span>Tanggal Wafat</span><span>${p.death||'—'}</span></div>
       <div class="panel-row"><span>Pasangan</span><span>${
         p.spouses.length
           ? p.spouses.map(s=>`<a href="#" onclick="openDetail('${s}');return false;">${people[s].name}</a>`).join(', ')
@@ -1208,8 +1218,8 @@ function openDetail(id){
     </div>
     <div class="panel-footer">
       <button class="btn btn-text" onclick="enterAddChildMode('${id}')">Tambah Anak</button>
-      <button class="btn btn-ghost" onclick="closeDetail()">Tutup</button>
-      <button class="btn btn-primary" onclick="enterEditMode('${id}')">Edit data</button>
+      <button class="btn btn-ghost btn-flex" onclick="closeDetail()"><span class="btn-full">Tutup</span><span class="btn-short">T</span></button>
+      <button class="btn btn-primary btn-flex" onclick="enterEditMode('${id}')"><span class="btn-full">Edit data</span><span class="btn-short">E</span></button>
     </div>`;
   editingMode = false; // membuka kartu selalu mulai dari mode lihat (bukan mode entri)
   document.getElementById('overlay').classList.add('show');
@@ -1238,7 +1248,7 @@ function enterEditMode(id){
           <option value="P" ${p.gender==='P'?'selected':''}>Perempuan</option>
         </select></div>
       <div class="panel-row"><span>Tanggal Lahir</span><input id="f_birth" type="text" inputmode="numeric" placeholder="tt/bb/tttt" maxlength="10" value="${p.birth||''}" oninput="formatTglLahir(this)"></div>
-      <div class="panel-row"><span>Tahun wafat</span><input id="f_death" type="text" value="${p.death||''}"></div>
+      <div class="panel-row"><span>Tanggal Wafat</span><input id="f_death" type="text" inputmode="numeric" placeholder="tt/bb/tttt" maxlength="10" value="${p.death||''}" oninput="formatTglLahir(this)"></div>
 
       <div class="panel-section-title">Alamat &amp; Kontak</div>
       <div class="panel-row"><span>Provinsi</span><input id="f_provinsi" type="text" value="${p.provinsi||''}"></div>
@@ -1282,7 +1292,7 @@ function saveEditMode(id){
 
   // audit log: catat kolom apa saja yang benar-benar berubah (bukan seluruh isi form)
   const fieldLabels = {
-    name:'Nama', gender:'Jenis kelamin', birth:'Tanggal lahir', death:'Tahun wafat',
+    name:'Nama', gender:'Jenis kelamin', birth:'Tanggal lahir', death:'Tanggal wafat',
     provinsi:'Provinsi', kabupaten:'Kabupaten/Kota', kecamatan:'Kecamatan', desa:'Desa/Kelurahan',
     rtrw:'RT/RW', phone:'No. HP', email:'Email', mapsUrl:'Link Maps',
   };
