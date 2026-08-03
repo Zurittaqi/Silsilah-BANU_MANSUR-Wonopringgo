@@ -226,6 +226,7 @@
   .content{
     padding:16px 20px; overflow:hidden; position:relative;
     display:flex; flex-direction:column; min-height:0;
+    min-width:0;  
     background:#DFF6EE;
   }
   .content-scroll{
@@ -412,6 +413,16 @@
     .card{min-height:130px; padding:10px 7px;}
     .panel{width:94%;}
   }
+  @media (max-height: 500px) and (orientation: landscape){
+  .overlay{
+    position:fixed;   /* lepas dari kotak .content, menutupi seluruh layar HP */
+    z-index:9999;     /* pastikan tampil paling depan di atas semua elemen */
+  }
+  .panel{
+    width:96vw; max-width:96vw;
+    height:92vh; max-height:92vh;
+  }
+}
  @media (max-width: 460px){
   .sidebar{
     min-width:90px;
