@@ -312,14 +312,21 @@
     max-height:82%; box-shadow:0 20px 50px rgba(20,46,42,.3);
     display:flex; flex-direction:column; overflow:hidden;
     container-type:inline-size; container-name:panelbox;
+    position:relative;
   }
   .panel-header{
     padding:18px; display:flex; gap:12px; align-items:center; border-bottom:1px solid var(--line);
     background:linear-gradient(135deg,#fffdf8,#f4efe1); flex-shrink:0;
   }
-  .panel-header .avatar{margin:0; width:46px; height:46px; font-size:16px;}
+  .panel-header .avatar{margin:0; width:46px; height:46px; font-size:16px;} 
   .panel-header h3{margin:0; font-family:'Fraunces',serif; font-size:16px;}
   .panel-header p{margin:2px 0 0; font-size:12px; color:var(--ink-soft);}
+    .panel-back{
+      position:absolute; top:10px; right:10px; z-index:10;
+      background:none; border:none; padding:0; margin:0;
+      font-size:20px; line-height:1; cursor:pointer; color:var(--ink); font-weight:1200;
+  }
+.panel-back:hover{color:var(--sogan);}
   .panel-body{padding:16px 18px; font-size:13px; overflow-y:auto; flex:1; min-height:0;}
   .panel-row{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--line);}
   .panel-row:last-child{border-bottom:none;}
@@ -429,23 +436,21 @@
     z-index:9999;
   }
   .panel{
-    width:96vw; max-width:96vw;
+    width:96vw; max-width:47vw;
     height:92vh; max-height:92vh;
   }
-
-  /* Tambahan: tipiskan header popup saat landscape sempit */
   .panel-header{
-    padding:8px 14px;              /* asli: 18px, dipadatkan */
-    gap:8px;                       /* asli: 12px */
+    padding:6px 10px;              
+    gap:3px;                      
   }
   .panel-header .avatar{
-    width:32px; height:32px; font-size:13px;   /* asli: 46px/46px/16px */
+    width:32px; height:32px; font-size:13px;   
   }
   .panel-header h3{
-    font-size:14px;                /* asli: 16px */
+    font-size:14px;                 
   }
   .panel-header p{
-    display:none;                  /* sembunyikan sub-teks (mis. tanggal lahir singkat) biar 1 baris saja */
+    display:none;                
   }
 }
  @media (max-width: 460px){
@@ -1222,9 +1227,10 @@ function openDetail(id){
 
   document.getElementById('detailPanel').innerHTML = `
     <div class="panel-header">
+      <button class="panel-back" onclick="closeDetail()" aria-label="Tutup">←</button>
       <div class="avatar" style="background:${genColors[(gen-1)%genColors.length]}">${initials(p.name)}</div>
       <div>
-        <h3>${p.name}</h3>
+      <h3>${p.name}</h3>
         <p>Generasi ke-${gen}${isMenantu? ' · Menantu':''}${p.death?' · Almarhum/ah':''}</p>
         <span class="panel-nrb">NRB ${nrb}</span>
       </div>
