@@ -419,8 +419,33 @@
     z-index:9999;     /* pastikan tampil paling depan di atas semua elemen */
   }
   .panel{
+    width:96vw; max-width:47vw;
+    height:92vh; max-height:92vh;
+  }
+}
+  @media (max-height: 500px) and (orientation: landscape){
+  .overlay{
+    position:fixed;
+    z-index:9999;
+  }
+  .panel{
     width:96vw; max-width:96vw;
     height:92vh; max-height:92vh;
+  }
+
+  /* Tambahan: tipiskan header popup saat landscape sempit */
+  .panel-header{
+    padding:8px 14px;              /* asli: 18px, dipadatkan */
+    gap:8px;                       /* asli: 12px */
+  }
+  .panel-header .avatar{
+    width:32px; height:32px; font-size:13px;   /* asli: 46px/46px/16px */
+  }
+  .panel-header h3{
+    font-size:14px;                /* asli: 16px */
+  }
+  .panel-header p{
+    display:none;                  /* sembunyikan sub-teks (mis. tanggal lahir singkat) biar 1 baris saja */
   }
 }
  @media (max-width: 460px){
