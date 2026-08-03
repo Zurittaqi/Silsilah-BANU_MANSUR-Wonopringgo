@@ -1033,7 +1033,7 @@ function buildTreeNode(id){
   const isOpen = expanded.has(id);
   row.innerHTML = `
     <span class="twisty ${kids.length?'':'leaf'}">${isOpen?'▾':'▸'}</span>
-    <span class="folder-ico">${kids.length?'📁':'👤'}</span>
+    <span class="folder-ico">${kids.length?'📂':'📁'}</span>
     <span class="tree-name">${people[id].name}</span>
     <span class="tree-badge">${kids.length||''}</span>`;
   row.onclick=(e)=>{
@@ -1130,7 +1130,11 @@ function renderContent(){
         ${p.death? '<span class="pill pill-alm">Alm.</span>':''}
       </div>`;
     // klik kartu (nama/avatar/dsb) SELALU membuka kartu rincian orang tsb.
-    card.onclick = ()=> openDetail(id);
+    card.onclick = ()=>{
+      currentId = id;
+      expanded.add(id);
+      render();
+    };
     // tombol kecil di pojok kartu yang navigasi ke daftar keturunannya (folder-style),
     // dipisah dengan stopPropagation supaya tidak memicu openDetail.
     const navBtn = card.querySelector('.open-desc-btn');
