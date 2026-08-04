@@ -224,31 +224,102 @@
   }
 
   .content{
-    padding:16px 20px; overflow:hidden; position:relative;
+    padding:6px 20px 16px; overflow:hidden; position:relative;
     display:flex; flex-direction:column; min-height:0;
     min-width:0;  
     background:#DFF6EE;
   }
   .content-scroll{
     overflow-y:auto; flex:1; min-height:0; margin:0 -20px; padding:0 20px;
+    display:flex; flex-direction:column;
   }
   .content-heading{
-    display:flex; align-items:baseline; gap:8px; margin-bottom:12px;
+    display:flex; align-items:baseline; gap:8px; margin-bottom:6px; flex-shrink:0;
   }
   .content-heading h2{
     font-family:'Fraunces',serif; font-size:19px; margin:0; font-weight:600;
   }
   .content-heading .pair{color:var(--ink-soft); font-size:17px;}
-  .empty-hint{color:var(--ink-soft); font-size:13px; margin-bottom:14px;}
+  .empty-hint{color:var(--ink-soft); font-size:13px; margin-bottom:14px; flex-shrink:0;}
 
   .card-grid{
     display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:11px;
-    align-content:start; 
+    align-content:start; flex-shrink:0;
   }
-  .card-list .card-grid{grid-template-columns:1fr;}
-  .card-list .card{flex-direction:row; align-items:center; text-align:left; gap:12px; padding:9px 12px; min-height:0;}
-  .card-list .avatar{margin:0;}
-  .card-list .card-meta{margin:0;}
+  /* ===== TREE VIEW (org chart, bercabang ke bawah, dengan zoom/pan) ===== */
+  #cardGrid{ display:grid; }
+  .view-tree #cardGrid{ display:none; }
+  .tree-view-wrap{
+    display:none; position:relative; flex:1; min-height:0;
+    overflow:hidden; border-radius:10px; background:
+      radial-gradient(circle, #C9E9DD 1px, transparent 1px) 0 0/16px 16px, #EAF7F1;
+    cursor:grab; user-select:none;
+  }
+  .tree-view-wrap.panning{ cursor:grabbing; }
+  .view-tree .tree-view-wrap{ display:flex; align-items:flex-start; justify-content:center; }
+  .tree-view-canvas{
+    padding-top:8px; transform-origin:top center; display:inline-block;
+    white-space:nowrap;
+  }
+  .tree-controls{
+    position:absolute; right:10px; bottom:10px; z-index:5; display:flex; flex-direction:column;
+    gap:4px; background:#fff; border:1px solid var(--line-strong); border-radius:8px; padding:4px;
+    box-shadow:var(--shadow);
+  }
+  .tree-controls button{
+    width:26px; height:26px; border:none; background:transparent; border-radius:5px; cursor:pointer;
+    font-size:14px; color:var(--ink); line-height:1;
+  }
+  .tree-controls button:hover{background:#f2f0ea;}
+  .tree-hint{
+    position:absolute; left:10px; bottom:10px; z-index:5; font-size:10.5px; color:var(--ink-soft);
+    background:#ffffffcc; border:1px solid var(--line); border-radius:8px; padding:3px 8px;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .org-tree, .org-tree ul{
+    display:flex; position:relative; margin:0;
+  }
+  .org-tree ul{ padding-left:0; padding-top:22px; }
+  .org-tree li{
+    display:flex; flex-direction:column; align-items:center; list-style:none; position:relative;
+    padding:22px 10px 0; z-index:1;
+  }
+  .org-tree li::before, .org-tree li::after{
+    content:''; position:absolute; top:0; right:50%; width:50%; height:22px;
+    border-top:1px solid var(--line-strong); z-index:0;
+  }
+  .org-tree li::after{ right:auto; left:50%; border-left:1px solid var(--line-strong); }
+  .org-tree li:only-child::after, .org-tree li:only-child::before{ display:none; }
+  .org-tree li:only-child{ padding-top:0; }
+  .org-tree li:first-child::before{ border:0 none; }
+  .org-tree li:last-child::after{ border:0 none; }
+  .org-tree li:first-child::after{ border-radius:6px 0 0 0; }
+  .org-tree li:last-child::before{ border-radius:0 6px 0 0; }
+  .org-tree > li{ padding-top:0; }
+  .org-tree > li::before, .org-tree > li::after{ display:none; }
+  .org-tree ul::before{
+    content:''; position:absolute; top:0; left:50%; border-left:1px solid var(--line-strong);
+    width:0; height:22px; z-index:0;
+  }
+  .org-node{
+    display:inline-flex; flex-direction:column; align-items:center; justify-content:center; position:relative;
+    background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px 16px 16px; min-width:78px; min-height:44px; box-shadow:var(--shadow); cursor:pointer;
+    border-top:3px solid var(--gen-color, var(--sogan)); z-index:2;
+  }
+  .org-node:hover{ box-shadow:0 6px 18px rgba(43,38,32,.15); }
+  .org-toggle{
+    position:absolute; bottom:-13px; left:50%; transform:translateX(-50%);
+    width:24px; height:24px; border-radius:50%; background:var(--teal); color:#fff;
+    font-size:14px; line-height:24px; text-align:center; font-weight:700; z-index:8;
+    box-shadow:0 2px 6px rgba(20,46,42,.35); cursor:pointer;
+  }
+  .org-toggle:hover{ background:var(--sogan-dark); transform:translateX(-50%) scale(1.08); }
+  .org-toggle:active{ transform:translateX(-50%) scale(.95); }
+  .org-name{
+    display:flex; flex-direction:column; align-items:center; font-weight:600; font-size:12px;
+    line-height:1.2; white-space:nowrap;
+  }
 
   .card{
     background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius);
@@ -375,7 +446,6 @@
     cursor:grab; line-height:1; user-select:none; opacity:.55;
   }
   .card:hover .drag-handle{opacity:1;}
-  .card-list .drag-handle{position:static; margin-right:2px; opacity:1;}
   .card.dragging{opacity:.4;}
   .card.drag-over{outline:2px dashed var(--teal); outline-offset:2px;}
 
@@ -385,7 +455,7 @@
   }
   .panel-section-title{
     font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
-    margin:14px 0 4px; font-weight:700;
+    margin:12px 0 4px; font-weight:400;
   }
   .panel-section-title:first-child{margin-top:0;}
   .panel-maps{
@@ -498,7 +568,7 @@
   <!-- TOOLBAR -->
   <div class="toolbar">
     <div class="toolbar-row toolbar-row-1">
-      <button class="btn btn-ghost" onclick="goHome()" title="Kembali ke leluhur utama">🏠</button>
+      <button class="btn btn-ghost" onclick="goHome()" title="Kembali ke leluhur utama">🏦</button>
 
       <div class="dropdown-wrap" id="aksiDropdownWrap">
         <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown('aksiDropdownWrap')">⚙️ Aksi ▾</button>
@@ -513,8 +583,8 @@
       </div>
 
       <div class="view-toggle">
-        <button class="active" id="gridBtn" title="Tampilan grid">▦</button>
-        <button id="listBtn" title="Tampilan list">☰</button>
+        <button class="active" id="gridBtn" title="Tampilan grid">❏</button>
+        <button id="treeBtn" title="Tampilan pohon (struktur organisasi)">⌗</button>
       </div>
 
       <div class="toolbar-spacer"></div>
@@ -551,6 +621,17 @@
       <div class="content-scroll">
         <div class="empty-hint" id="emptyHint" style="display:none;">Belum ada anak yang tercatat di sini. Gunakan "Tambah Anak" untuk menambahkan.</div>
         <div class="card-grid" id="cardGrid"></div>
+
+        <!-- tampilan pohon (org chart, bercabang ke bawah) dengan zoom/pan & collapse per cabang -->
+        <div class="tree-view-wrap" id="treeViewWrap">
+          <div class="tree-view-canvas" id="treeViewCanvas"></div>
+          <div class="tree-hint">Geser = pan · Scroll = zoom · Klik ⊖/⊕ = buka/tutup cabang · Klik kartu = buka rincian</div>
+          <div class="tree-controls">
+            <button type="button" id="treeZoomIn" title="Perbesar">＋</button>
+            <button type="button" id="treeZoomOut" title="Perkecil">－</button>
+            <button type="button" id="treeZoomReset" title="Atur ulang tampilan">⟳</button>
+          </div>
+        </div>
       </div>
 
       <!-- detail overlay -->
@@ -1101,6 +1182,9 @@ function buildTreeNode(id){
   // menu klik kanan di kartu grid (Buka/Tambah Anak/Edit/Jadikan Kakak/Jadikan Adik/Hapus),
   // berlaku untuk SEMUA folder termasuk leluhur/akar yang tidak punya orang tua.
   row.oncontextmenu = (e)=>{ e.preventDefault(); e.stopPropagation(); openCtxMenu(e, id); };
+  // Klik ganda (double click) pada folder di sidebar langsung membuka kartu rincian
+  // orang tersebut (tidak perlu masuk-navigasi dulu seperti klik tunggal).
+  row.ondblclick = (e)=>{ e.stopPropagation(); openDetail(id); };
   wrap.appendChild(row);
   if(kids.length && isOpen){
     const childWrap=document.createElement('div');
@@ -1223,7 +1307,130 @@ function renderContent(){
     });
     grid.appendChild(card);
   });
+
+  renderTreeView();
 }
+
+/* ================= TAMPILAN POHON (org chart) =================
+   Menampilkan currentId sebagai simpul teratas dan keturunannya bercabang ke
+   bawah, memakai teknik CSS <ul>/<li> murni untuk garis penghubung. Setiap
+   simpul yang punya anak bisa di-collapse/expand sendiri (state disimpan di
+   Set `expanded` yang sama dipakai sidebar), supaya data besar tidak
+   berantakan. Seluruh kanvas bisa di-zoom & di-geser (pan). */
+let treeScale = 1, treeX = 0, treeY = 0;
+let lastTreeRootId = null;
+
+function buildOrgNode(id, isRoot){
+  const p = people[id];
+  const kids = childrenOf(id);
+  const hasKids = kids.length > 0;
+  const isOpen = isRoot || expanded.has(id);
+  const gen = getGeneration(id);
+  const words = p.name.trim().split(/\s+/);
+  const line1 = words[0] || '';
+  const line2 = words.slice(1).join(' ');
+  return `<li>
+    <div class="org-node" data-id="${id}" style="--gen-color:${genColors[(gen-1)%genColors.length]}">
+      <div class="org-name"><span>${line1}</span>${line2? `<span>${line2}</span>`:''}</div>
+      ${hasKids? `<span class="org-toggle" data-toggle="${id}" title="${isOpen? 'Tutup cabang':'Buka cabang'}">${isOpen? '−':'+'}</span>`:''}
+    </div>
+    ${hasKids && isOpen? `<ul>${kids.map(kid=>buildOrgNode(kid,false)).join('')}</ul>` : ''}
+  </li>`;
+}
+
+function renderTreeView(){
+  const canvas = document.getElementById('treeViewCanvas');
+  if(!canvas) return;
+  if(!currentId || !people[currentId]){ canvas.innerHTML=''; return; }
+  // buka cabang tingkat pertama secara otomatis setiap kali pindah folder,
+  // supaya pengguna langsung melihat anak-anaknya begitu masuk tampilan pohon
+  if(currentId !== lastTreeRootId){
+    expanded.add(currentId);
+    treeScale = 1; treeX = 0; treeY = 0;
+    lastTreeRootId = currentId;
+  }
+  canvas.innerHTML = `<ul class="org-tree">${buildOrgNode(currentId, true)}</ul>`;
+  updateTreeTransform();
+}
+
+function updateTreeTransform(){
+  const canvas = document.getElementById('treeViewCanvas');
+  if(canvas) canvas.style.transform = `translate(${treeX}px, ${treeY}px) scale(${treeScale})`;
+}
+
+function treeZoom(factor, clientX, clientY){
+  const wrap = document.getElementById('treeViewWrap');
+  const rect = wrap.getBoundingClientRect();
+  const px = (clientX!==undefined? clientX-rect.left : rect.width/2);
+  const py = (clientY!==undefined? clientY-rect.top : rect.height/2);
+  const newScale = Math.min(2.5, Math.max(0.3, treeScale*factor));
+  treeX = px - (px-treeX)*(newScale/treeScale);
+  treeY = py - (py-treeY)*(newScale/treeScale);
+  treeScale = newScale;
+  updateTreeTransform();
+}
+
+function treeResetView(){
+  treeScale = 1; treeX = 0; treeY = 0;
+  updateTreeTransform();
+}
+
+(function initTreeViewInteraction(){
+  const wrap = document.getElementById('treeViewWrap');
+  const canvas = document.getElementById('treeViewCanvas');
+  if(!wrap || !canvas) return;
+
+  // klik pada simpul (buka kartu rincian) atau tombol ⊖/⊕ (buka/tutup cabang)
+  canvas.addEventListener('click', e=>{
+    const toggle = e.target.closest('.org-toggle');
+    if(toggle){
+      e.stopPropagation();
+      const id = toggle.dataset.toggle;
+      if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
+      renderSidebar();
+      renderTreeView();
+      return;
+    }
+    const node = e.target.closest('.org-node');
+    if(node) openDetail(node.dataset.id);
+  });
+
+  // geser (pan) dengan drag mouse/sentuh, kecuali kalau mulai dari kartu/tombol
+  let panning=false, panStartX=0, panStartY=0, startTX=0, startTY=0;
+  function panStart(x,y,target){
+    if(target.closest && target.closest('.org-node')) return;
+    panning = true; panStartX=x; panStartY=y; startTX=treeX; startTY=treeY;
+    wrap.classList.add('panning');
+  }
+  function panMove(x,y){
+    if(!panning) return;
+    treeX = startTX + (x-panStartX);
+    treeY = startTY + (y-panStartY);
+    updateTreeTransform();
+  }
+  function panEnd(){ panning=false; wrap.classList.remove('panning'); }
+
+  wrap.addEventListener('mousedown', e=> panStart(e.clientX, e.clientY, e.target));
+  document.addEventListener('mousemove', e=> panMove(e.clientX, e.clientY));
+  document.addEventListener('mouseup', panEnd);
+  wrap.addEventListener('touchstart', e=>{
+    const t=e.touches[0]; panStart(t.clientX, t.clientY, e.target);
+  }, {passive:true});
+  wrap.addEventListener('touchmove', e=>{
+    if(!panning) return; const t=e.touches[0]; panMove(t.clientX, t.clientY);
+  }, {passive:true});
+  wrap.addEventListener('touchend', panEnd);
+
+  // scroll mouse = zoom in/out, berpusat pada posisi kursor
+  wrap.addEventListener('wheel', e=>{
+    e.preventDefault();
+    treeZoom(e.deltaY < 0 ? 1.1 : 0.9, e.clientX, e.clientY);
+  }, {passive:false});
+
+  document.getElementById('treeZoomIn').onclick = ()=> treeZoom(1.2);
+  document.getElementById('treeZoomOut').onclick = ()=> treeZoom(0.8);
+  document.getElementById('treeZoomReset').onclick = treeResetView;
+})();
 
 function renderStatus(){
   if(!currentId || !people[currentId]){
@@ -1251,7 +1458,7 @@ function openDetail(id){
 
   document.getElementById('detailPanel').innerHTML = `
     <div class="panel-header">
-      <button class="panel-back" onclick="closeDetail()" aria-label="Tutup">←</button>
+      <button class="panel-back" onclick="closeDetail()" aria-label="Tutup">x</button>
       <div class="avatar" style="background:${genColors[(gen-1)%genColors.length]}">${initials(p.name)}</div>
       <div>
       <h3>${p.name}</h3>
@@ -2020,10 +2227,21 @@ document.getElementById('ctxMenu').addEventListener('click',(e)=>{
 });
 
 document.getElementById('searchBox').addEventListener('input', e=>{ searchTerm=e.target.value; render(); });
-document.getElementById('gridBtn').onclick=()=>{ viewMode='grid'; document.getElementById('contentArea').classList.remove('card-list'); document.getElementById('gridBtn').classList.add('active'); document.getElementById('listBtn').classList.remove('active'); };
-document.getElementById('listBtn').onclick=()=>{ viewMode='list'; document.getElementById('contentArea').classList.add('card-list'); document.getElementById('listBtn').classList.add('active'); document.getElementById('gridBtn').classList.remove('active'); };
+document.getElementById('gridBtn').onclick=()=>{
+  viewMode='grid';
+  document.getElementById('contentArea').classList.remove('view-tree');
+  document.getElementById('gridBtn').classList.add('active');
+  document.getElementById('treeBtn').classList.remove('active');
+};
+document.getElementById('treeBtn').onclick=()=>{
+  viewMode='tree';
+  document.getElementById('contentArea').classList.add('view-tree');
+  document.getElementById('treeBtn').classList.add('active');
+  document.getElementById('gridBtn').classList.remove('active');
+  renderTreeView();
+};
 
-// Tombol 🏠: kembali ke leluhur utama (akar pertama pohon silsilah).
+// Tombol 🏦: kembali ke leluhur utama (akar pertama pohon silsilah).
 // Sidebar akan menyorot folder leluhur tsb, dan konten menampilkan anak-anaknya.
 function goHome(){
   if(!rootIds[0]) return;
