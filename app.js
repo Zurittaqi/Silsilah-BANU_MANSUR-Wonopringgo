@@ -409,18 +409,22 @@ function childrenOf(id){
   return rawChildrenOf(id).sort((a,b)=> (people[a].siblingOrder??0) - (people[b].siblingOrder??0));
 }
 
-function getGeneration(id, memo={}){
+function getGeneration(id, memo={}, visiting=new Set()){
   if(memo[id]!==undefined) return memo[id];
+  if(visiting.has(id)){
+    console.warn('Lingkaran data terdeteksi pada getGeneration, id:', id);
+    memo[id]=1; return 1;
+  }
+  visiting.add(id);
   const p = people[id].parents;
   if(p.length){
-    const g = Math.max(...p.map(pp=>getGeneration(pp,memo))) + 1;
-    memo[id]=g; return g;
+    const g = Math.max(...p.map(pp=>getGeneration(pp,memo,visiting))) + 1;
+    memo[id]=g; visiting.delete(id); return g;
   }
-  if(rootIds.includes(id)){ memo[id]=1; return 1; }
-  // pasangan yang menikah masuk (tanpa orang tua tercatat) mengikuti generasi pasangannya
+  if(rootIds.includes(id)){ memo[id]=1; visiting.delete(id); return 1; }
   const sp = (people[id].spouses||[])[0];
-  if(sp){ const g = getGeneration(sp, memo); memo[id]=g; return g; }
-  memo[id]=1; return 1;
+  if(sp){ const g = getGeneration(sp, memo, visiting); memo[id]=g; visiting.delete(id); return g; }
+  memo[id]=1; visiting.delete(id); return 1;
 }
 function totalGenerations(){
   const gens = Object.keys(people).map(id=>getGeneration(id));
