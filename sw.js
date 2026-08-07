@@ -27,6 +27,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Cache API cuma mendukung request GET. Request method lain (POST/PUT/dll —
+  // termasuk semua panggilan tulis ke Firestore) harus dibiarkan lewat langsung
+  // ke network tanpa disentuh cache, kalau tidak "cache.put()" akan gagal dengan
+  // TypeError: Failed to execute 'put' on 'Cache': Request method 'POST' is unsupported.
+  if (event.request.method !== 'GET') {
+    return; // biarkan browser menangani request ini secara normal (tidak di-intercept)
+  }
+
   // Network-first untuk file utama, fallback ke cache saat offline
   event.respondWith(
     fetch(event.request)
