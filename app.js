@@ -634,7 +634,27 @@ function renderContent(){
   } else {
     pairLabel.innerHTML = '';
   }
-  emptyHint.textContent = 'Belum ada anak yang tercatat di sini. Gunakan "Tambah Anak" untuk menambahkan.';
+  // Saat orang yang sedang dibuka belum punya anak: selain teks hint, tampilkan
+  // tombol kotak kecil bergaya kartu/folder (warna --gen-color sama seperti kartu)
+  // untuk membuka kartu rincian orang ini sendiri, dan satu tombol lagi per pasangan
+  // (kalau ada) di sebelah kanannya - sampai maksimal 4 pasangan.
+  const hintGenColor = genColors[(getGeneration(currentId)-1)%genColors.length];
+  emptyHint.innerHTML = `
+    <div>Belum ada anak yang tercatat di sini. Gunakan "Tambah Anak" untuk menambahkan.</div>
+    <div class="empty-hint-actions">
+      <button type="button" class="mini-open-card" style="--gen-color:${hintGenColor}" data-open-detail="${currentId}" title="Buka kartu ${escapeHtml(person.name)}">
+        <span class="mini-open-card-ico">📂</span><span>Buka</span>
+      </button>
+      ${(person.spouses||[]).filter(sid=>people[sid]).map(sid=>`
+        <button type="button" class="mini-open-card" style="--gen-color:${hintGenColor}" data-open-detail="${sid}" title="Buka kartu ${escapeHtml(people[sid].name)}">
+          <span class="mini-open-card-ico">📂</span><span>Buka</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
+  emptyHint.querySelectorAll('[data-open-detail]').forEach(btn=>{
+    btn.onclick = ()=> openDetail(btn.dataset.openDetail);
+  });
   emptyHint.style.display = kids.length? 'none':'block';
 
   grid.innerHTML='';
@@ -645,21 +665,9 @@ function renderContent(){
     const card=document.createElement('div');
     card.className='card';
     card.style.setProperty('--gen-color', genColors[(gen-1)%genColors.length]);
-    // Kartu tanpa anak sendiri (grandkids.length===0): tidak ada folder keturunan untuk
-    // dibuka, jadi tampilkan tombol "Buka" (membuka kartu rincian orang ini langsung).
-    // Kalau orang ini sudah punya pasangan (dan masih sama-sama belum punya anak), tombol
-    // "Buka" tambahan ditampilkan di sebelah kanannya untuk tiap pasangan (maks. 4 pasangan).
-    const cardTopBtn = grandkids.length
-      ? `<button type="button" class="open-desc-btn" data-nav="${id}" title="Buka keturunan">📂 ${grandkids.length}</button>`
-      : `<div class="card-open-actions">
-           <button type="button" class="open-desc-btn" data-open-detail="${id}" title="Buka kartu ${escapeHtml(p.name)}">Buka</button>
-           ${(p.spouses||[]).filter(sid=>people[sid]).map(sid=>
-             `<button type="button" class="open-desc-btn" data-open-detail="${sid}" title="Buka kartu ${escapeHtml(people[sid].name)}">Buka</button>`
-           ).join('')}
-         </div>`;
     card.innerHTML = `
       <span class="drag-handle" title="Seret untuk mengubah urutan anak" aria-hidden="true">⠿</span>
-      ${cardTopBtn}
+      ${grandkids.length? `<button type="button" class="open-desc-btn" data-nav="${id}" title="Buka keturunan">📂 ${grandkids.length}</button>`:''}
       <div class="avatar">${initials(p.name)}</div>
       <div class="card-name">${escapeHtml(p.name)}</div>
       <div class="card-meta">${escapeHtml(p.birth)}${p.death? ' – '+escapeHtml(p.death):' – sekarang'}</div>
@@ -687,13 +695,10 @@ function renderContent(){
     };
     // tombol kecil di pojok kartu yang navigasi ke daftar keturunannya (folder-style),
     // dipisah dengan stopPropagation supaya tidak memicu openDetail.
-    const navBtn = card.querySelector('.open-desc-btn[data-nav]');
+    const navBtn = card.querySelector('.open-desc-btn');
     if(navBtn){
       navBtn.onclick = (e)=>{ e.stopPropagation(); currentId=id; expanded.add(id); render(); };
     }
-    card.querySelectorAll('.open-desc-btn[data-open-detail]').forEach(btn=>{
-      btn.onclick = (e)=>{ e.stopPropagation(); openDetail(btn.dataset.openDetail); };
-    });
     card.oncontextmenu = (e)=>{ e.preventDefault(); openCtxMenu(e, id); };
     // Seret & lepas untuk mengubah URUTAN anak (siblingOrder) di folder ini saja —
     // tidak pernah mengubah data orang tua siapa pun.
