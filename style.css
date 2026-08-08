@@ -463,6 +463,15 @@
   }
   .open-desc-btn:hover{background:var(--teal); color:#fff; border-color:var(--teal);}
 
+  /* Wrapper untuk kartu tanpa anak: menampung 1 tombol "Buka" (kartu ini sendiri) +
+     1 tombol "Buka" tambahan per pasangan (jika ada), berjajar di pojok kanan-atas kartu,
+     memakai padding & gaya yang sama persis dengan .open-desc-btn agar konsisten. */
+  .card-open-actions{
+    position:absolute; top:8px; right:8px; display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;
+    max-width:calc(100% - 28px);
+  }
+  .card-open-actions .open-desc-btn{ position:static; }
+
   .drag-handle{
     position:absolute; top:8px; left:8px; font-size:13px; color:var(--ink-soft);
     cursor:grab; line-height:1; user-select:none; opacity:.55;

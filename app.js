@@ -645,9 +645,21 @@ function renderContent(){
     const card=document.createElement('div');
     card.className='card';
     card.style.setProperty('--gen-color', genColors[(gen-1)%genColors.length]);
+    // Kartu tanpa anak sendiri (grandkids.length===0): tidak ada folder keturunan untuk
+    // dibuka, jadi tampilkan tombol "Buka" (membuka kartu rincian orang ini langsung).
+    // Kalau orang ini sudah punya pasangan (dan masih sama-sama belum punya anak), tombol
+    // "Buka" tambahan ditampilkan di sebelah kanannya untuk tiap pasangan (maks. 4 pasangan).
+    const cardTopBtn = grandkids.length
+      ? `<button type="button" class="open-desc-btn" data-nav="${id}" title="Buka keturunan">📂 ${grandkids.length}</button>`
+      : `<div class="card-open-actions">
+           <button type="button" class="open-desc-btn" data-open-detail="${id}" title="Buka kartu ${escapeHtml(p.name)}">Buka</button>
+           ${(p.spouses||[]).filter(sid=>people[sid]).map(sid=>
+             `<button type="button" class="open-desc-btn" data-open-detail="${sid}" title="Buka kartu ${escapeHtml(people[sid].name)}">Buka</button>`
+           ).join('')}
+         </div>`;
     card.innerHTML = `
       <span class="drag-handle" title="Seret untuk mengubah urutan anak" aria-hidden="true">⠿</span>
-      ${grandkids.length? `<button type="button" class="open-desc-btn" data-nav="${id}" title="Buka keturunan">📂 ${grandkids.length}</button>`:''}
+      ${cardTopBtn}
       <div class="avatar">${initials(p.name)}</div>
       <div class="card-name">${escapeHtml(p.name)}</div>
       <div class="card-meta">${escapeHtml(p.birth)}${p.death? ' – '+escapeHtml(p.death):' – sekarang'}</div>
@@ -675,10 +687,13 @@ function renderContent(){
     };
     // tombol kecil di pojok kartu yang navigasi ke daftar keturunannya (folder-style),
     // dipisah dengan stopPropagation supaya tidak memicu openDetail.
-    const navBtn = card.querySelector('.open-desc-btn');
+    const navBtn = card.querySelector('.open-desc-btn[data-nav]');
     if(navBtn){
       navBtn.onclick = (e)=>{ e.stopPropagation(); currentId=id; expanded.add(id); render(); };
     }
+    card.querySelectorAll('.open-desc-btn[data-open-detail]').forEach(btn=>{
+      btn.onclick = (e)=>{ e.stopPropagation(); openDetail(btn.dataset.openDetail); };
+    });
     card.oncontextmenu = (e)=>{ e.preventDefault(); openCtxMenu(e, id); };
     // Seret & lepas untuk mengubah URUTAN anak (siblingOrder) di folder ini saja —
     // tidak pernah mengubah data orang tua siapa pun.
@@ -884,11 +899,23 @@ function openDetail(id){
       <div class="panel-row"><span>Jenis kelamin</span><span>${p.gender==='L'?'Laki-laki':'Perempuan'}</span></div>
       <div class="panel-row"><span>Tanggal Lahir</span><span>${escapeHtml(p.birth)}</span></div>
       <div class="panel-row"><span>Tanggal Wafat</span><span>${escapeHtml(p.death)||'—'}</span></div>
-      <div class="panel-row"><span>Pasangan</span><span>${
-        p.spouses.length
-          ? p.spouses.map(s=>`<a href="#" onclick="openDetail('${s}');return false;">${escapeHtml(people[s].name)}</a>`).join(', ')
-          : `<button class="btn btn-ghost btn-sm" onclick="enterAddSpouseMode('${id}')">＋ Tambah pasangan</button>`
-      }</span></div>
+      ${(()=>{
+        // Mendukung hingga 4 pasangan (poligami/poliandri): setiap slot Pasangan I-IV
+        // ditampilkan sebagai baris terpisah. Slot yang sudah terisi menampilkan link
+        // ke kartu pasangan tsb; slot kosong PERTAMA menampilkan tombol "+ Tambah pasangan";
+        // slot kosong setelahnya tidak ditampilkan sampai slot sebelumnya terisi.
+        const romawi = ['I','II','III','IV'];
+        return romawi.map((r, idx)=>{
+          const sid = p.spouses[idx];
+          if(sid && people[sid]){
+            return `<div class="panel-row"><span>Pasangan ${r}</span><span><a href="#" onclick="openDetail('${sid}');return false;">${escapeHtml(people[sid].name)}</a></span></div>`;
+          }
+          if(idx === p.spouses.length && p.spouses.length < 4){
+            return `<div class="panel-row"><span>Pasangan ${r}</span><span><button class="btn btn-ghost btn-sm" onclick="enterAddSpouseMode('${id}')">＋ Tambah pasangan</button></span></div>`;
+          }
+          return '';
+        }).join('');
+      })()}
       <div class="panel-row"><span>Orang tua</span><span>${p.parents.map(s=>escapeHtml(people[s].name)).join(' & ')||'—'}</span></div>
 
       <div class="panel-section-title">Alamat &amp; Kontak</div>
@@ -1014,12 +1041,16 @@ function cancelEditMode(id){
    diri, alamat/kontak, link maps, dsb), dan NRB-nya otomatis "ikut" NRB suami/istri
    (lihat getNRB: orang tanpa parents yang punya spouses akan memakai NRB pasangan + "-P"). */
 function enterAddSpouseMode(id){
+  const romawi = ['I','II','III','IV'];
+  const existingCount = (people[id].spouses||[]).length;
+  if(existingCount >= 4){ alert('Maksimal 4 pasangan (Pasangan I-IV) per orang.'); return; }
+  const nextLabel = romawi[existingCount];
   editingMode = true;
   document.getElementById('detailPanel').querySelector('.panel-footer')?.remove();
   const body = document.getElementById('detailPanel').querySelector('.panel-body');
   if(body){
     body.innerHTML = `
-      <div class="panel-section-title">Tambah Data Pasangan</div>
+      <div class="panel-section-title">Tambah Data Pasangan ${nextLabel}</div>
       <div class="panel-row"><span>Nama lengkap</span><input id="f_sp_name" type="text" placeholder="Nama pasangan"></div>
       <div class="panel-row"><span>Jenis kelamin</span>
         <select id="f_sp_gender">
@@ -1051,6 +1082,7 @@ function enterAddSpouseMode(id){
   panel.appendChild(footer);
 }
 function saveAddSpouse(id){
+  if((people[id].spouses||[]).length >= 4){ alert('Maksimal 4 pasangan (Pasangan I-IV) per orang.'); return; }
   const val = sel => { const el = document.getElementById(sel); return el? el.value.trim() : ''; };
   const name = val('f_sp_name');
   if(!name){ alert('Nama pasangan wajib diisi.'); return; }
