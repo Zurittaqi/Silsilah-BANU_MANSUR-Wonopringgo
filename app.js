@@ -597,6 +597,70 @@ function initials(name){
   return name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
 }
 
+/* ===== Konversi tanggal Masehi -> Hari + Pasaran Jawa + Hijriyah =====
+   Dipakai untuk menampilkan tabel 4-sel tanggal lahir/wafat secara otomatis,
+   cukup dari input tanggal Masehi (tt/bb/tttt).
+
+   Kalibrasi & verifikasi rumus (dicek terhadap 2 tanggal acuan yang umum dikutip):
+   - 26 Desember 1975 -> Jumat Wage, 22 Dzulhijjah 1395 H
+   - 17 Agustus 1945  -> Jumat Legi (hari kemerdekaan RI, sering dikutip)
+   Catatan: hasil Hijriyah memakai algoritma tabular (bukan hasil rukyat/hisab resmi),
+   jadi bisa selisih 1-2 hari dari catatan lokal/keluarga untuk tanggal tertentu -
+   wajar untuk metode konversi aritmetik seperti ini. */
+const HARI_NAMA = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const PASARAN_NAMA = ['Legi','Pahing','Pon','Wage','Kliwon'];
+const HIJRI_BULAN = ['Muharram','Safar','Rabiul Awal','Rabiul Akhir','Jumadil Awal','Jumadil Akhir','Rajab',"Sya'ban",'Ramadhan','Syawal',"Dzulqa'dah",'Dzulhijjah'];
+
+function gregorianToJD(gy, gm, gd){
+  return Math.floor((1461 * (gy + 4800 + Math.floor((gm - 14) / 12))) / 4) +
+         Math.floor((367 * (gm - 2 - 12 * Math.floor((gm - 14) / 12))) / 12) -
+         Math.floor((3 * Math.floor((gy + 4900 + Math.floor((gm - 14) / 12)) / 100)) / 4) +
+         gd - 32075;
+}
+function jdToHijri(jd){
+  const EPOCH_ADJ = 1948442; // dikalibrasi terhadap tanggal acuan di atas
+  let l = jd - EPOCH_ADJ + 10632;
+  const n = Math.floor((l - 1) / 10631);
+  l = l - 10631 * n + 354;
+  const j = (Math.floor((10985 - l) / 5316)) * (Math.floor((50 * l) / 17719)) + (Math.floor(l / 5670)) * (Math.floor((43 * l) / 15238));
+  l = l - (Math.floor((30 - j) / 15)) * (Math.floor((17719 * j) / 50)) - (Math.floor(j / 16)) * (Math.floor((15238 * j) / 43)) + 29;
+  const month = Math.floor((24 * l) / 709);
+  const day = l - Math.floor((709 * month) / 24);
+  const year = 30 * n + j - 30;
+  return {day, month, year};
+}
+// Parse string "tt/bb/tttt" -> {y,m,d} kalau lengkap & valid, atau null kalau tidak
+// (mis. field lama yang cuma berisi tahun saja, atau kosong).
+function parseTglLengkap(str){
+  if(!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m) return null;
+  const d = +m[1], mo = +m[2], y = +m[3];
+  if(mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const test = new Date(y, mo-1, d);
+  if(test.getFullYear()!==y || test.getMonth()!==mo-1 || test.getDate()!==d) return null; // tanggal tidak valid (mis. 31/02)
+  return {y, m: mo, d};
+}
+// Bangun HTML tabel 4-sel (Hari | Tanggal Masehi | Pasaran | Tanggal Hijriyah).
+// Kalau tanggal tidak lengkap/tidak valid, kembalikan teks aslinya apa adanya (fallback).
+function renderTanggalLengkap(str){
+  const parsed = parseTglLengkap(str);
+  if(!parsed) return escapeHtml(str || '-');
+  const {y, m, d} = parsed;
+  const jd = gregorianToJD(y, m, d);
+  const dow = new Date(y, m-1, d).getDay();
+  const hariNama = HARI_NAMA[dow];
+  const pasaran = PASARAN_NAMA[(jd + 3) % 5];
+  const h = jdToHijri(jd);
+  const bulanMasehi = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const tglMasehi = `${d} ${bulanMasehi[m-1]} ${y}`;
+  const tglHijri = `${h.day} ${HIJRI_BULAN[h.month-1]} ${h.year}`;
+  return `<div class="tgl-lengkap-table">
+    <div class="tgl-cell">${escapeHtml(hariNama)}</div><div class="tgl-cell tgl-cell-masehi">${escapeHtml(tglMasehi)}</div>
+    <div class="tgl-cell">${escapeHtml(pasaran)}</div><div class="tgl-cell tgl-cell-hijri">${escapeHtml(tglHijri)}</div>
+  </div>`;
+}
+
 function renderContent(){
   const heading = document.getElementById('heading');
   const pairLabel = document.getElementById('pairLabel');
@@ -902,8 +966,8 @@ function openDetail(id){
     <div class="panel-body">
       <div class="panel-section-title">Data Diri</div>
       <div class="panel-row"><span>Jenis kelamin</span><span>${p.gender==='L'?'Laki-laki':'Perempuan'}</span></div>
-      <div class="panel-row"><span>Tanggal Lahir</span><span>${escapeHtml(p.birth)}</span></div>
-      <div class="panel-row"><span>Tanggal Wafat</span><span>${escapeHtml(p.death)||'—'}</span></div>
+      <div class="panel-row panel-row-tgl"><span>Tanggal Lahir</span><span>${renderTanggalLengkap(p.birth)}</span></div>
+      <div class="panel-row panel-row-tgl"><span>Tanggal Wafat</span><span>${p.death? renderTanggalLengkap(p.death) : '—'}</span></div>
       ${(()=>{
         // Mendukung hingga 4 pasangan (poligami/poliandri): setiap slot Pasangan I-IV
         // ditampilkan sebagai baris terpisah. Slot yang sudah terisi menampilkan link
