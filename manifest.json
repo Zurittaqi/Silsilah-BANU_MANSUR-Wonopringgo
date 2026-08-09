@@ -1,7 +1,7 @@
 {
-  "name": "Silsilah Bani Kuzari",
+  "name": "Silsilah Banu Mansur",
   "short_name": "Silsilah",
-  "description": "Aplikasi Silsilah Bani Kuzari — Navigasi File Manager",
+  "description": "Aplikasi Silsilah Banu Mansur — Navigasi File Manager",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
