@@ -260,7 +260,7 @@ function downloadBackupJSON(){
   const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
   const a = document.createElement('a');
   a.href = url;
-  a.download = `backup-silsilah-bani-kuzari-${stamp}.json`;
+  a.download = `backup-silsilah-banu-mansur-${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
