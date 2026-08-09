@@ -608,7 +608,7 @@ function renderContent(){
     heading.onclick = null;
     pairLabel.innerHTML = '';
     grid.innerHTML = '';
-    emptyHint.textContent = 'Belum ada leluhur yang tercatat. Klik "👳 Tambah Ortu" di atas untuk mulai mengisi silsilah keluarga.';
+    emptyHint.textContent = 'Belum ada leluhur yang tercatat.';
     emptyHint.style.display = 'block';
     return;
   }
@@ -1118,7 +1118,7 @@ function cancelAddSpouse(id){
    pasangannya (jika sudah menikah), sehingga anak langsung tampil di folder yang benar. */
 function enterAddChildMode(parentId){
   if(!parentId || !people[parentId]){
-    alert('Belum ada leluhur/akar yang tercatat. Gunakan tombol "Tambah Ortu" terlebih dahulu.');
+    alert('Belum ada leluhur/akar yang tercatat. Fitur "Tambah Ortu" untuk saat ini dinonaktifkan.');
     return;
   }
   editingMode = true;
@@ -1609,6 +1609,34 @@ function openAuditLog(){
     </div>`;
   document.getElementById('modalOverlay').classList.add('show');
   loadAuditPage(false);
+}
+
+// Catatan silsilah: menggantikan tombol "Tambah Ortu" untuk sementara (lihat dropdown Aksi).
+// Menampilkan nasab/silsilah leluhur secara statis lewat modal generik (modalOverlay/modalPanel)
+// yang sama dipakai oleh Riwayat Perubahan.
+const CATATAN_SILSILAH_TEXT = 'KH Mas Mansur bin Djojoredjo bin Mertoloyo bin Wongso Dipuro bin Wongso Menggolo';
+function openCatatan(){
+  // Tiap nama (selain kata penghubung "bin") dibungkus pill kecil berpadding tipis,
+  // meniru gaya badge/pill yang dipakai di kartu anak (.pill) supaya konsisten.
+  const namaSilsilah = CATATAN_SILSILAH_TEXT.split(' bin ').map(escapeHtml);
+  const catatanHtml = namaSilsilah
+    .map(n => `<span class="catatan-name">${n}</span>`)
+    .join(' bin ');
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[0]}">📝</div>
+      <div>
+        <h3>Catatan</h3>
+        <p>Nasab / silsilah leluhur</p>
+      </div>
+    </div>
+    <div class="panel-body">
+      <p style="line-height:2.6;">${catatanHtml}</p>
+    </div>
+    <div class="panel-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Tutup</button>
+    </div>`;
+  document.getElementById('modalOverlay').classList.add('show');
 }
 
 function openProfileEditor(){

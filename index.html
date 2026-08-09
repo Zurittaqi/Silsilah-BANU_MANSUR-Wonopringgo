@@ -34,8 +34,7 @@
       <div class="dropdown-wrap" id="aksiDropdownWrap">
         <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown('aksiDropdownWrap')" aria-haspopup="true" aria-expanded="false">⚙️ Aksi ▾</button>
         <div class="dropdown-menu" id="aksiDropdownMenu">
-          <button onclick="closeDropdowns(); enterAddChildMode(currentId)">💗 Tambah Anak</button>
-          <button onclick="closeDropdowns(); enterAddParentMode()">👳 Tambah Ortu</button>
+          <button onclick="closeDropdowns(); openCatatan()">📝 Catatan</button>
           <button onclick="closeDropdowns(); openAuditLog()">📜 Riwayat Perubahan</button>
           <button onclick="closeDropdowns(); downloadBackupJSON()" title="Unduh seluruh data silsilah sebagai file JSON (backup manual)">💾 Unduh Data</button>
           <button onclick="closeDropdowns(); document.getElementById('restoreFileInput').click()" title="Pulihkan data dari file backup JSON yang pernah diunduh">📤 Panggil Data</button>
