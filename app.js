@@ -250,7 +250,7 @@ function saveRootIdsToDB(){
 function downloadBackupJSON(){
   const backup = {
     formatVersi: 1,
-    aplikasi: 'Silsilah Bani Kuzari',
+    aplikasi: 'Silsilah Banu Mansur',
     diunduhPada: new Date().toISOString(),
     rootIds,
     people,
