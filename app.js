@@ -484,15 +484,31 @@ function totalGenerations(){
    Contoh: 1.02.01  ->  anak ke-2 dari leluhur akar #1, lalu anak pertamanya.
    Urutan anak di sini mengikuti childrenOf() (siblingOrder), supaya nomor NRB selalu
    sesuai dengan urutan tampil di pohon & grid — bukan lagi murni berdasar tahun lahir. */
+/* Dari array parents seorang anak (bisa 1 atau 2 ortu, urutannya TIDAK selalu
+   pihak darah/leluhur duluan — tergantung ortu mana yang folder-nya sedang
+   dibuka saat anak itu ditambahkan), pilih ortu yang benar-benar merupakan
+   leluhur di garis silsilah pohon: yaitu yang PUNYA orang tua sendiri
+   (sambungan darah ke atas) atau berstatus akar pohon (rootIds). Pasangan
+   yang "menikah masuk" (menantu) tidak punya parents & tidak ada di rootIds,
+   jadi otomatis tersingkir dari pilihan ini. Kalau tidak ada yang cocok
+   (mis. datanya belum lengkap), baru fallback ke parents[0] seperti semula.
+   Dipakai di NRB, canonicalChildren, breadcrumb, dan kinshipLine supaya
+   semuanya konsisten mengikuti garis silsilah yang sama. */
+function primaryParentOf(id){
+  const parents = people[id].parents || [];
+  if(!parents.length) return null;
+  const isLeluhur = pid => people[pid] && (people[pid].parents.length > 0 || rootIds.includes(pid));
+  return parents.find(isLeluhur) || parents[0];
+}
 function canonicalChildren(id){
-  return childrenOf(id).filter(pid => people[pid].parents[0] === id);
+  return childrenOf(id).filter(pid => primaryParentOf(pid) === id);
 }
 function getNRB(id, memo={}){
   if(memo[id]) return memo[id];
   const p = people[id].parents;
   let nrb;
   if(p.length){
-    const parent = p[0];
+    const parent = primaryParentOf(id);
     const parentNRB = getNRB(parent, memo);
     const sibs = canonicalChildren(parent);
     const idx = sibs.indexOf(id) + 1;
@@ -509,6 +525,19 @@ function getNRB(id, memo={}){
 
 /* current open folder = person id (breadcrumb path is ancestor chain); null = belum ada data */
 let currentId = null;
+// Kalau tidak null, isinya key grup 💍 yang lagi difokuskan (format 'grp:<personId>:<groupKey>').
+// Dipakai supaya klik folder "Bersama X" di sidebar bisa menyaring konten grid untuk HANYA
+// menampilkan anak dari pasangan itu saja - persis seperti membuka folder biasa. Direset ke
+// null setiap kali navigasi biasa terjadi (lihat setActiveGroup / navigateToPerson di bawah).
+let activeGroupKey = null;
+function navigateToPerson(id){
+  currentId = id;
+  activeGroupKey = null;
+}
+function navigateToGroup(personId, groupKey){
+  currentId = personId;
+  activeGroupKey = groupKey;
+}
 let viewMode = 'grid';
 let searchTerm = '';
 let editingMode = false; // true saat kartu sedang dalam mode entri/edit data (popup sensitif, tidak boleh tertutup otomatis)
@@ -518,7 +547,7 @@ function ancestorChain(id){
   const chain=[id];
   let cur=id;
   while(people[cur].parents.length){
-    cur = people[cur].parents[0]; // ambil garis salah satu ortu untuk jalur folder
+    cur = primaryParentOf(cur); // ambil ortu di garis leluhur/darah, bukan sekadar index 0
     chain.unshift(cur);
   }
   return chain;
@@ -528,7 +557,7 @@ function kinshipChain(id){
   const chain=[id];
   let cur=id;
   while(people[cur].parents.length){
-    cur = people[cur].parents[0];
+    cur = primaryParentOf(cur);
     chain.push(cur);
   }
   return chain;
@@ -544,7 +573,7 @@ function renderBreadcrumb(){
     const span=document.createElement('span');
     span.className='crumb'+(i===chain.length-1?' current':'');
     span.textContent=people[id].name;
-    span.onclick=()=>{ if(i!==chain.length-1){ currentId=id; render(); } };
+    span.onclick=()=>{ if(i!==chain.length-1){ navigateToPerson(id); render(); } };
     bc.appendChild(span);
     if(i<chain.length-1){
       const sep=document.createElement('span');
@@ -578,7 +607,8 @@ function buildTreeNode(id){
   wrap.className='tree-node';
   const kids = childrenOf(id);
   const row=document.createElement('div');
-  row.className='tree-row'+(id===(highlightedId||currentId)?' active':'');
+  const isActive = !activeGroupKey && id===(highlightedId||currentId);
+  row.className='tree-row'+(isActive?' active':'');
   const isOpen = expanded.has(id);
   row.innerHTML = `
     <span class="twisty ${kids.length?'':'leaf'}">${isOpen?'▾':'▸'}</span>
@@ -599,7 +629,7 @@ function buildTreeNode(id){
       if(kids.length){
         if(isOpen) expanded.delete(id); else expanded.add(id);
       }
-      currentId=id;
+      navigateToPerson(id);
       render();
     }, 250);
   };
@@ -627,17 +657,19 @@ function buildTreeNode(id){
   return wrap;
 }
 
-// Simpul folder tambahan (💍) di sidebar, mewadahi anak-anak dari SATU pasangan tertentu
-// saja, supaya folder ayah/ibu dengan >1 pasangan tidak menampilkan semua anak tercampur
-// rata. Status buka/tutup grup ini disimpan terpisah (key diawali "grp:") dari status
-// buka/tutup folder orang biasa, supaya tidak saling bentrok.
+// Folder pengelompokan 💍 di sidebar - mewadahi anak-anak dari SATU pasangan tertentu saja,
+// supaya folder ayah/ibu dengan >1 pasangan tidak menampilkan semua anak tercampur rata.
+// Berperilaku SAMA PERSIS seperti folder orang biasa: klik tunggal = buka/tutup cabang di
+// sidebar SEKALIGUS menyaring konten di sebelah kanan supaya hanya menampilkan anak dari
+// pasangan ini saja (bukan seluruh anak dari segala pasangan tercampur).
 function buildSpouseGroupNode(personId, group){
   const wrap=document.createElement('div');
   wrap.className='tree-node spouse-group-node'+(group.ambiguous?' spouse-group-warn':'');
   const groupKey = 'grp:'+personId+':'+group.key;
-  const isOpen = expanded.has(groupKey);
   const row=document.createElement('div');
-  row.className='tree-row spouse-group-row';
+  const isActive = activeGroupKey === groupKey;
+  row.className='tree-row spouse-group-row'+(isActive?' active':'');
+  const isOpen = expanded.has(groupKey);
   row.innerHTML = `
     <span class="twisty ${group.kids.length?'':'leaf'}">${isOpen?'▾':'▸'}</span>
     <span class="folder-ico">${group.ambiguous?'⚠️':'💍'}</span>
@@ -645,9 +677,19 @@ function buildSpouseGroupNode(personId, group){
     <span class="tree-badge">${group.kids.length||''}</span>`;
   row.onclick=(e)=>{
     e.stopPropagation();
-    if(group.kids.length){ if(isOpen) expanded.delete(groupKey); else expanded.add(groupKey); }
-    render();
+    if(row._clickTimer){ clearTimeout(row._clickTimer); row._clickTimer = null; return; }
+    row._clickTimer = setTimeout(()=>{
+      row._clickTimer = null;
+      if(group.kids.length){
+        if(isOpen) expanded.delete(groupKey); else expanded.add(groupKey);
+      }
+      navigateToGroup(personId, groupKey);
+      render();
+    }, 250);
   };
+  // Klik kanan pada folder pasangan tidak membuka menu edit/hapus orang (karena ini bukan
+  // satu individu), jadi cukup dicegah saja (default browser context menu tetap muncul).
+  row.oncontextmenu = (e)=>{ e.stopPropagation(); };
   wrap.appendChild(row);
   if(group.kids.length && isOpen){
     const childWrap=document.createElement('div');
@@ -781,8 +823,7 @@ function renderContent(){
     });
   } else {
     pairLabel.innerHTML = '';
-  }
-  // Saat orang yang sedang dibuka belum punya anak: selain teks hint, tampilkan
+  }  // Saat orang yang sedang dibuka belum punya anak: selain teks hint, tampilkan
   // tombol kotak kecil bergaya kartu/folder (warna --gen-color sama seperti kartu)
   // untuk membuka kartu rincian orang ini sendiri, dan satu tombol lagi per pasangan
   // (kalau ada) di sebelah kanannya - sampai maksimal 4 pasangan.
@@ -810,7 +851,22 @@ function renderContent(){
   // poliandri), kartu anak-anaknya dikelompokkan per-pasangan (header 💍) supaya anak dari
   // istri/suami 1 tidak lagi tercampur tampilannya dengan anak dari istri/suami 2, dst.
   // Pencarian tetap berlaku di dalam tiap grup (grup kosong hasil pencarian disembunyikan).
-  const groups = getSpouseGroups(currentId);
+  // Kalau pengguna mengklik folder "Bersama X" tertentu di sidebar (activeGroupKey terisi
+  // dan cocok dengan currentId), tampilkan HANYA grup itu saja - persis seperti membuka
+  // folder biasa yang isinya sudah tersaring, bukan seluruh pasangan sekaligus.
+  let groups = getSpouseGroups(currentId);
+  let focusedGroup = null;
+  if(groups && activeGroupKey && activeGroupKey.startsWith('grp:'+currentId+':')){
+    focusedGroup = groups.find(g=> ('grp:'+currentId+':'+g.key) === activeGroupKey) || null;
+    if(focusedGroup) groups = [focusedGroup];
+  }
+  if(focusedGroup){
+    const backBar = document.createElement('div');
+    backBar.className = 'spouse-focus-bar';
+    backBar.innerHTML = `<button type="button" class="btn btn-ghost btn-sm">← Tampilkan semua pasangan ${escapeHtml(person.name)}</button>`;
+    backBar.querySelector('button').onclick = ()=>{ navigateToPerson(currentId); render(); };
+    grid.appendChild(backBar);
+  }
   if(groups){
     grid.className = 'card-grid card-grid-grouped';
     groups.forEach(g=>{
@@ -876,7 +932,7 @@ function createChildCard(id){
     if(card._clickTimer){ clearTimeout(card._clickTimer); card._clickTimer = null; return; }
     card._clickTimer = setTimeout(()=>{
       card._clickTimer = null;
-      currentId = id;
+      navigateToPerson(id);
       expanded.add(id);
       render();
     }, 250);
@@ -889,7 +945,7 @@ function createChildCard(id){
   // dipisah dengan stopPropagation supaya tidak memicu openDetail.
   const navBtn = card.querySelector('.open-desc-btn');
   if(navBtn){
-    navBtn.onclick = (e)=>{ e.stopPropagation(); currentId=id; expanded.add(id); render(); };
+    navBtn.onclick = (e)=>{ e.stopPropagation(); navigateToPerson(id); expanded.add(id); render(); };
   }
   card.oncontextmenu = (e)=>{ e.preventDefault(); openCtxMenu(e, id); };
   // Seret & lepas untuk mengubah URUTAN anak (siblingOrder) di folder ini saja —
@@ -927,12 +983,33 @@ function buildOrgNode(id, isRoot){
   const words = p.name.trim().split(/\s+/);
   const line1 = escapeHtml(words[0] || '');
   const line2 = escapeHtml(words.slice(1).join(' '));
+  const groups = getSpouseGroups(id);
+  const branchHtml = groups
+    ? groups.map(g=> buildOrgGroupNode(id, g)).join('')
+    : kids.map(kid=> buildOrgNode(kid,false)).join('');
   return `<li>
     <div class="org-node" data-id="${id}" style="--gen-color:${genColors[(gen-1)%genColors.length]}">
       <div class="org-name"><span>${line1}</span>${line2? `<span>${line2}</span>`:''}</div>
       ${hasKids? `<span class="org-toggle" data-toggle="${id}" title="${isOpen? 'Tutup cabang':'Buka cabang'}">${isOpen? '−':'+'}</span>`:''}
     </div>
-    ${hasKids && isOpen? `<ul>${kids.map(kid=>buildOrgNode(kid,false)).join('')}</ul>` : ''}
+    ${hasKids && isOpen? `<ul>${branchHtml}</ul>` : ''}
+  </li>`;
+}
+
+// Simpul 💍 di tampilan pohon/struktur organisasi, sejajar dengan pengelompokan yang sama
+// dipakai di sidebar & grid kartu - supaya anak dari tiap pasangan tetap terpisah cabangnya
+// di SEMUA tampilan, bukan cuma di grid. Simpul ini SENGAJA tidak punya toggle buka/tutup
+// sendiri (selalu ikut terbuka begitu simpul orang tuanya dibuka) - supaya tidak perlu klik
+// dua kali (satu untuk buka orang tua, satu lagi untuk buka tiap pasangan) untuk melihat cucu.
+function buildOrgGroupNode(personId, group){
+  const hasKids = group.kids.length > 0;
+  const label = group.ambiguous ? group.label : ('Bersama '+group.label);
+  const groupKey = 'grp:'+personId+':'+group.key;
+  return `<li>
+    <div class="org-node org-node-spouse-group${group.ambiguous?' org-node-warn':''}" data-group-key="${groupKey}" data-group-person="${personId}" style="--gen-color:${genColors[3]}">
+      <div class="org-name"><span>${group.ambiguous?'⚠️':'💍'}</span><span>${escapeHtml(label)}</span></div>
+    </div>
+    ${hasKids? `<ul>${group.kids.map(kid=>buildOrgNode(kid,false)).join('')}</ul>` : ''}
   </li>`;
 }
 
@@ -987,6 +1064,16 @@ function treeResetView(){
       if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
       renderSidebar();
       renderTreeView();
+      return;
+    }
+    // simpul 💍 (pengelompokan pasangan) - klik = "buka folder" ini di tampilan grid,
+    // sama seperti klik folder pasangan di sidebar (bukan kartu orang, jadi tidak
+    // membuka kartu rincian, tapi menyaring konten grid ke pasangan ini saja).
+    const groupNode = e.target.closest('.org-node-spouse-group');
+    if(groupNode){
+      e.stopPropagation();
+      navigateToGroup(groupNode.dataset.groupPerson, groupNode.dataset.groupKey);
+      document.getElementById('gridBtn').click();
       return;
     }
     const node = e.target.closest('.org-node');
@@ -1102,10 +1189,7 @@ function openDetail(id){
         return romawi.map((r, idx)=>{
           const sid = p.spouses[idx];
           if(sid && people[sid]){
-            return `<div class="panel-row"><span>Pasangan ${r}</span><span style="display:flex;align-items:center;gap:8px;">
-              <a href="#" onclick="openDetail('${sid}');return false;">${escapeHtml(people[sid].name)}</a>
-              <button class="btn btn-ghost btn-sm" style="color:var(--maroon);border-color:var(--maroon);" title="Hapus status pasangan ini" onclick="openRemoveSpouseModal('${id}','${sid}')">🗑️</button>
-            </span></div>`;
+            return `<div class="panel-row"><span>Pasangan ${r}</span><span><a href="#" onclick="openDetail('${sid}');return false;">${escapeHtml(people[sid].name)}</a></span></div>`;
           }
           if(idx === p.spouses.length && p.spouses.length < 4){
             return `<div class="panel-row"><span>Pasangan ${r}</span><span><button class="btn btn-ghost btn-sm" onclick="enterAddSpouseMode('${id}')">＋ Tambah pasangan</button></span></div>`;
@@ -1401,6 +1485,7 @@ function saveAddChild(parentId){
   document.removeEventListener('click', outsideClickCloseDetail, true);
   expanded.add(parentId);
   currentId = parentId;
+  activeGroupKey = null;
   savePersonToDB(newId);
   logAudit('add', newId, `Menambah anak: ${name}`);
   render();
@@ -1511,6 +1596,7 @@ function saveAddParent(targetId){
     saveRootIdsToDB();
   }
   currentId = newId;
+  activeGroupKey = null;
   expanded.add(newId);
   editingMode = false;
   savePersonToDB(newId);
@@ -1696,7 +1782,7 @@ function makeOlderSibling(id){
     render();
     return;
   }
-  const siblings = childrenOf(people[id].parents[0]);
+  const siblings = childrenOf(primaryParentOf(id));
   const idx = siblings.indexOf(id);
   if(idx <= 0) return;
   const above = siblings[idx-1];
@@ -1717,7 +1803,7 @@ function makeYoungerSibling(id){
     render();
     return;
   }
-  const siblings = childrenOf(people[id].parents[0]);
+  const siblings = childrenOf(primaryParentOf(id));
   const idx = siblings.indexOf(id);
   if(idx === -1 || idx >= siblings.length-1) return;
   const below = siblings[idx+1];
@@ -1981,10 +2067,12 @@ function openBulkAssignModal(personId, kidIds){
       </div>
     </div>
     <div class="panel-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
-      <button class="btn btn-primary" onclick="confirmBulkAssign('${personId}', ${JSON.stringify(kidIds)})">Simpan</button>
+      <button class="btn btn-ghost" id="bulkAssignCancelBtn">Batal</button>
+      <button class="btn btn-primary" id="bulkAssignSaveBtn">Simpan</button>
     </div>`;
   document.getElementById('modalOverlay').classList.add('show');
+  document.getElementById('bulkAssignCancelBtn').onclick = closeModal;
+  document.getElementById('bulkAssignSaveBtn').onclick = ()=> confirmBulkAssign(personId, kidIds);
 }
 function confirmBulkAssign(personId, kidIds){
   const picked = document.querySelector('input[name="f_bulk_spouse"]:checked');
@@ -2063,7 +2151,7 @@ document.getElementById('ctxMenu').addEventListener('click',(e)=>{
   // untuk orang lain yang punya anak.
   if(act==='open'){
     const isLeluhurTanpaOrtu = rootIds.includes(id) && !people[id].parents.length;
-    if(childrenOf(id).length && !isLeluhurTanpaOrtu){ currentId=id; expanded.add(id); render(); }
+    if(childrenOf(id).length && !isLeluhurTanpaOrtu){ navigateToPerson(id); expanded.add(id); render(); }
     else openDetail(id);
   }
   // "Edit data" dari menu klik-kanan: enterEditMode() hanya mengganti isi panel-body/footer
@@ -2097,7 +2185,7 @@ function pathToRoot(id){
   while(cur && people[cur] && !guard.has(cur)){
     guard.add(cur);
     chain.unshift(cur);
-    cur = (people[cur].parents||[])[0];
+    cur = primaryParentOf(cur);
   }
   return chain;
 }
@@ -2125,8 +2213,9 @@ function runGlobalSearch(term){
   box.querySelectorAll('[data-jump]').forEach(btn=>{
     btn.onclick = ()=>{
       const id = btn.dataset.jump;
-      const parent = (people[id].parents||[])[0];
+      const parent = primaryParentOf(id);
       currentId = parent && people[parent] ? parent : id;
+      activeGroupKey = null;
       expanded.add(currentId);
       highlightedId = id;
       document.getElementById('searchBox').value = '';
@@ -2151,6 +2240,7 @@ document.getElementById('gridBtn').onclick=()=>{
   document.getElementById('contentArea').classList.remove('view-tree');
   document.getElementById('gridBtn').classList.add('active');
   document.getElementById('treeBtn').classList.remove('active');
+  render();
 };
 document.getElementById('treeBtn').onclick=()=>{
   viewMode='tree';
@@ -2165,6 +2255,7 @@ document.getElementById('treeBtn').onclick=()=>{
 function goHome(){
   if(!rootIds[0]) return;
   currentId = rootIds[0];
+  activeGroupKey = null;
   highlightedId = null;   // pastikan sorotan sidebar ikut currentId (bukan sisa kartu yg sempat terbuka)
   expanded.add(currentId);
   render();

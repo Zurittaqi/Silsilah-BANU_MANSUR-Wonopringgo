@@ -148,6 +148,7 @@
     padding:8px 10px; font-size:13px; cursor:pointer; color:var(--ink); white-space:nowrap;
   }
   .dropdown-menu button:hover{ background:#f2f0ea; }
+  .dropdown-menu button.danger{ color:var(--maroon); }
   .user-chip{
     font-family:inherit; font-size:12.5px; color:var(--ink-soft); background:#fff;
     border:1px solid var(--line-strong); border-radius:8px; padding:6px 10px; cursor:pointer;
@@ -287,7 +288,12 @@
   }
   /* ===== TREE VIEW (org chart, bercabang ke bawah, dengan zoom/pan) ===== */
   #cardGrid{ display:grid; }
-  .view-tree #cardGrid{ display:none; }
+  /* !important di sini sengaja: saat toggle # (pohon) aktif, grid kartu (termasuk
+     versi terkelompok #cardGrid#cardGrid.card-grid-grouped di bawah, yang dua-ID-nya
+     lebih spesifik) HARUS tetap tersembunyi. Tanpa ini, anggota berpasangan >1
+     (grup "Bersama X") tetap nongol di atas kanvas pohon karena selektor grouped
+     tsb menang spesifisitas atas aturan .view-tree #cardGrid biasa. */
+  .view-tree #cardGrid{ display:none !important; }
 
   /* ===== Pengelompokan kartu anak per-pasangan (💍) untuk orang tua ber-poligami/poliandri =====
      #cardGrid#cardGrid dipakai supaya spesifisitasnya menang atas aturan ID polos #cardGrid{display:grid}
@@ -314,12 +320,22 @@
     display:flex; flex-wrap:wrap; align-items:center; gap:8px;
   }
   .spouse-bulk-btn{ white-space:nowrap; }
+  .spouse-unlink-btn{
+    background:none; border:none; cursor:pointer; font-size:11px; padding:0 2px 0 3px;
+    opacity:.55; vertical-align:middle;
+  }
+  .spouse-unlink-btn:hover{ opacity:1; }
   .spouse-group .card-grid{ gap:11px; }
+  .spouse-focus-bar{ margin-bottom:4px; }
 
   /* Baris grup 💍 di sidebar pohon keluarga - dibedakan dari baris folder orang biasa */
   .spouse-group-row{ opacity:.92; }
   .spouse-group-row .folder-ico{ filter:none; }
   .spouse-group-warn .spouse-group-row{ color:#a15b00; }
+  .spouse-group-row-static{
+    cursor:default; padding-left:26px; /* menggantikan ruang tempat twisty biasanya berada */
+  }
+  .spouse-group-row-static:hover{ background:transparent; }
   .tree-view-wrap{
     display:none; position:relative; flex:1; min-height:0;
     overflow:hidden; border-radius:10px; background:
@@ -391,6 +407,12 @@
     display:flex; flex-direction:column; align-items:center; font-weight:600; font-size:12px;
     line-height:1.2; white-space:nowrap;
   }
+  .org-node-spouse-group{
+    background:transparent; box-shadow:none; border-style:dashed; padding:6px 12px 14px; min-height:auto;
+  }
+  .org-node-spouse-group .org-name{ font-size:11px; font-weight:700; }
+  .org-node-warn{ border-color:#d98c2b; }
+  .org-node-warn .org-name{ color:#a15b00; }
 
   .card{
     background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius);
