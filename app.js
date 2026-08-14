@@ -250,7 +250,7 @@ function saveRootIdsToDB(){
 function downloadBackupJSON(){
   const backup = {
     formatVersi: 1,
-    aplikasi: 'Silsilah Banu Mansur',
+    aplikasi: 'Silsilah Bani Kuzari',
     diunduhPada: new Date().toISOString(),
     rootIds,
     people,
@@ -407,6 +407,54 @@ function migrateAllSiblingOrders(){
 }
 function childrenOf(id){
   return rawChildrenOf(id).sort((a,b)=> (people[a].siblingOrder??0) - (people[b].siblingOrder??0));
+}
+
+/* ===== Pengelompokan anak per-pasangan (💍) =====
+   Dipakai saat seseorang tercatat punya LEBIH DARI SATU pasangan (poligami/poliandri),
+   supaya anak-anaknya tidak lagi tercampur dalam satu daftar rata, melainkan dikelompokkan
+   berdasarkan pasangan mana yang benar-benar jadi ayah/ibu kandungnya.
+   - Kalau orang ini hanya punya 0-1 pasangan tercatat: return null (tak perlu grouping,
+     tampilan tetap seperti sebelumnya / flat).
+   - Tiap anak dikelompokkan lewat co-parent-nya: anggota lain di array `parents` anak itu
+     selain `id` sendiri.
+     - Tepat 1 co-parent tercatat -> masuk grup pasangan itu (kasus normal/sudah benar).
+     - 0 co-parent -> grup "belum ditentukan pasangan" (mis. anak luar nikah/dicatat tunggal).
+     - >1 co-parent -> grup "⚠️ perlu dipastikan" (data lama/legacy yang masih mencatat SEMUA
+       pasangan sekaligus sebagai orang tua - inilah sumber percampuran yang perlu dibetulkan
+       manual lewat "Tentukan Ibu/Ayah" di menu klik-kanan kartu anak). */
+function getSpouseGroups(id){
+  const person = people[id];
+  if(!person || (person.spouses||[]).length < 2) return null;
+  const kids = childrenOf(id);
+  const bySpouse = {};
+  const groups = [];
+  kids.forEach(kid=>{
+    const coParents = (people[kid].parents||[]).filter(p=> p!==id && people[p]);
+    let key, spouseId, ambiguous=false;
+    if(coParents.length === 1){ spouseId = coParents[0]; key = 'sp:'+spouseId; }
+    else if(coParents.length === 0){ spouseId = null; key = 'sp:none'; }
+    else { spouseId = null; key = 'sp:multi'; ambiguous = true; }
+    if(!bySpouse[key]){
+      bySpouse[key] = {
+        key, spouseId, ambiguous,
+        label: spouseId ? people[spouseId].name : (ambiguous? 'Perlu dipastikan ibu/ayahnya' : 'Belum ditentukan pasangan'),
+        kids: []
+      };
+      groups.push(bySpouse[key]);
+    }
+    bySpouse[key].kids.push(kid);
+  });
+  // urutkan sesuai urutan pasangan tercatat di kartu orang ini (Pasangan I, II, III, IV),
+  // grup ambigu/tanpa-pasangan ditaruh paling akhir supaya menonjol untuk dibereskan.
+  const order = (person.spouses||[]).map(s=>'sp:'+s);
+  groups.sort((a,b)=>{
+    const ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+    if(ia===-1 && ib===-1) return a.key.localeCompare(b.key);
+    if(ia===-1) return 1;
+    if(ib===-1) return -1;
+    return ia-ib;
+  });
+  return groups;
 }
 
 function getGeneration(id, memo={}, visiting=new Set()){
@@ -568,7 +616,43 @@ function buildTreeNode(id){
   if(kids.length && isOpen){
     const childWrap=document.createElement('div');
     childWrap.className='tree-children';
-    kids.forEach(kid=> childWrap.appendChild(buildTreeNode(kid)));
+    const groups = getSpouseGroups(id);
+    if(groups){
+      groups.forEach(g=> childWrap.appendChild(buildSpouseGroupNode(id, g)));
+    } else {
+      kids.forEach(kid=> childWrap.appendChild(buildTreeNode(kid)));
+    }
+    wrap.appendChild(childWrap);
+  }
+  return wrap;
+}
+
+// Simpul folder tambahan (💍) di sidebar, mewadahi anak-anak dari SATU pasangan tertentu
+// saja, supaya folder ayah/ibu dengan >1 pasangan tidak menampilkan semua anak tercampur
+// rata. Status buka/tutup grup ini disimpan terpisah (key diawali "grp:") dari status
+// buka/tutup folder orang biasa, supaya tidak saling bentrok.
+function buildSpouseGroupNode(personId, group){
+  const wrap=document.createElement('div');
+  wrap.className='tree-node spouse-group-node'+(group.ambiguous?' spouse-group-warn':'');
+  const groupKey = 'grp:'+personId+':'+group.key;
+  const isOpen = expanded.has(groupKey);
+  const row=document.createElement('div');
+  row.className='tree-row spouse-group-row';
+  row.innerHTML = `
+    <span class="twisty ${group.kids.length?'':'leaf'}">${isOpen?'▾':'▸'}</span>
+    <span class="folder-ico">${group.ambiguous?'⚠️':'💍'}</span>
+    <span class="tree-name">${group.ambiguous? escapeHtml(group.label) : 'Bersama '+escapeHtml(group.label)}</span>
+    <span class="tree-badge">${group.kids.length||''}</span>`;
+  row.onclick=(e)=>{
+    e.stopPropagation();
+    if(group.kids.length){ if(isOpen) expanded.delete(groupKey); else expanded.add(groupKey); }
+    render();
+  };
+  wrap.appendChild(row);
+  if(group.kids.length && isOpen){
+    const childWrap=document.createElement('div');
+    childWrap.className='tree-children';
+    group.kids.forEach(kid=> childWrap.appendChild(buildTreeNode(kid)));
     wrap.appendChild(childWrap);
   }
   return wrap;
@@ -722,66 +806,107 @@ function renderContent(){
   emptyHint.style.display = kids.length? 'none':'block';
 
   grid.innerHTML='';
-  kids.forEach(id=>{
-    const p = people[id];
-    const gen = getGeneration(id);
-    const grandkids = childrenOf(id);
-    const card=document.createElement('div');
-    card.className='card';
-    card.style.setProperty('--gen-color', genColors[(gen-1)%genColors.length]);
-    card.innerHTML = `
-      <span class="drag-handle" title="Seret untuk mengubah urutan anak" aria-hidden="true">⠿</span>
-      ${grandkids.length? `<button type="button" class="open-desc-btn" data-nav="${id}" title="Buka keturunan">📂 ${grandkids.length}</button>`:''}
-      <div class="avatar">${initials(p.name)}</div>
-      <div class="card-name">${escapeHtml(p.name)}</div>
-      <div class="card-meta">${escapeHtml(p.birth)}${p.death? ' – '+escapeHtml(p.death):' – sekarang'}</div>
-      <div class="card-pills">
-        <span class="pill pill-gender-${p.gender}">${p.gender==='L'?'Laki-laki':'Perempuan'}</span>
-        ${p.death? '<span class="pill pill-alm">Alm.</span>':''}
+  // Kalau folder yang sedang dibuka adalah orang dengan >1 pasangan tercatat (poligami/
+  // poliandri), kartu anak-anaknya dikelompokkan per-pasangan (header 💍) supaya anak dari
+  // istri/suami 1 tidak lagi tercampur tampilannya dengan anak dari istri/suami 2, dst.
+  // Pencarian tetap berlaku di dalam tiap grup (grup kosong hasil pencarian disembunyikan).
+  const groups = getSpouseGroups(currentId);
+  if(groups){
+    grid.className = 'card-grid card-grid-grouped';
+    groups.forEach(g=>{
+      const groupKids = g.kids.filter(id=> kids.includes(id));
+      if(!groupKids.length) return; // tersaring habis oleh pencarian, sembunyikan grup
+      const groupWrap = document.createElement('div');
+      groupWrap.className = 'spouse-group'+(g.ambiguous? ' spouse-group-warn':'');
+      groupWrap.innerHTML = `<div class="spouse-group-title">
+        <span class="spouse-group-ico">${g.ambiguous? '⚠️':'💍'}</span>
+        <span>${g.ambiguous? escapeHtml(g.label) : 'Bersama '+escapeHtml(g.label)}</span>
+        <span class="spouse-group-count">${groupKids.length}</span>
       </div>`;
-    // klik tunggal pada kartu = navigasi masuk ke folder anak-anaknya (folder-style).
-    // klik ganda (double click) atau klik kanan -> "Buka" = membuka kartu rincian orang tsb.
-    // Klik tunggal DITUNDA sebentar (250ms): kalau klik kedua datang cepat (dblclick),
-    // aksi navigasi folder dibatalkan dan diganti buka kartu rincian. Ini perlu karena
-    // klik tunggal me-render ulang kartu, sehingga kartu lama hilang sebelum dblclick sempat terdeteksi.
-    card.onclick = ()=>{
-      if(card._clickTimer){ clearTimeout(card._clickTimer); card._clickTimer = null; return; }
-      card._clickTimer = setTimeout(()=>{
-        card._clickTimer = null;
-        currentId = id;
-        expanded.add(id);
-        render();
-      }, 250);
-    };
-    card.ondblclick = ()=>{
-      if(card._clickTimer){ clearTimeout(card._clickTimer); card._clickTimer = null; }
-      openDetail(id);
-    };
-    // tombol kecil di pojok kartu yang navigasi ke daftar keturunannya (folder-style),
-    // dipisah dengan stopPropagation supaya tidak memicu openDetail.
-    const navBtn = card.querySelector('.open-desc-btn');
-    if(navBtn){
-      navBtn.onclick = (e)=>{ e.stopPropagation(); currentId=id; expanded.add(id); render(); };
-    }
-    card.oncontextmenu = (e)=>{ e.preventDefault(); openCtxMenu(e, id); };
-    // Seret & lepas untuk mengubah URUTAN anak (siblingOrder) di folder ini saja —
-    // tidak pernah mengubah data orang tua siapa pun.
-    card.draggable = true;
-    card.dataset.id = id;
-    card.addEventListener('dragstart', e=>{ e.stopPropagation(); card.classList.add('dragging'); e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed='move'; });
-    card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
-    card.addEventListener('dragover', e=>{ e.preventDefault(); card.classList.add('drag-over'); });
-    card.addEventListener('dragleave', ()=> card.classList.remove('drag-over'));
-    card.addEventListener('drop', e=>{
-      e.preventDefault(); e.stopPropagation();
-      card.classList.remove('drag-over');
-      const draggedId = e.dataTransfer.getData('text/plain');
-      if(draggedId && draggedId !== id) reorderSiblingBeforeTarget(draggedId, id);
+      if(g.ambiguous || g.spouseId===null){
+        const hint = document.createElement('div');
+        hint.className = 'spouse-group-hint';
+        const bulkBtnHtml = `<button type="button" class="btn btn-ghost btn-sm spouse-bulk-btn">💍 Tetapkan ${groupKids.length} anak ini sekaligus...</button>`;
+        hint.innerHTML = (g.ambiguous
+          ? 'Data lama: klik kanan tiap kartu di bawah ini → "Tentukan Ibu/Ayah", atau tetapkan semuanya sekaligus. '
+          : 'Belum tercatat pasangan mana - tetapkan semuanya sekaligus, atau klik kanan tiap kartu satu-satu. ')
+          + bulkBtnHtml;
+        groupWrap.appendChild(hint);
+        hint.querySelector('.spouse-bulk-btn').onclick = ()=> openBulkAssignModal(currentId, groupKids);
+      }
+      const groupGrid = document.createElement('div');
+      groupGrid.className = 'card-grid';
+      groupKids.forEach(id=> groupGrid.appendChild(createChildCard(id)));
+      groupWrap.appendChild(groupGrid);
+      grid.appendChild(groupWrap);
     });
-    grid.appendChild(card);
-  });
+  } else {
+    grid.className = 'card-grid';
+    kids.forEach(id=> grid.appendChild(createChildCard(id)));
+  }
 
   renderTreeView();
+}
+
+// Membangun satu kartu anak (dipakai baik untuk tampilan flat maupun tampilan
+// yang dikelompokkan per-pasangan 💍) — logika interaksinya sama persis seperti semula.
+function createChildCard(id){
+  const p = people[id];
+  const gen = getGeneration(id);
+  const grandkids = childrenOf(id);
+  const card=document.createElement('div');
+  card.className='card';
+  card.style.setProperty('--gen-color', genColors[(gen-1)%genColors.length]);
+  card.innerHTML = `
+    <span class="drag-handle" title="Seret untuk mengubah urutan anak" aria-hidden="true">⠿</span>
+    ${grandkids.length? `<button type="button" class="open-desc-btn" data-nav="${id}" title="Buka keturunan">📂 ${grandkids.length}</button>`:''}
+    <div class="avatar">${initials(p.name)}</div>
+    <div class="card-name">${escapeHtml(p.name)}</div>
+    <div class="card-meta">${escapeHtml(p.birth)}${p.death? ' – '+escapeHtml(p.death):' – sekarang'}</div>
+    <div class="card-pills">
+      <span class="pill pill-gender-${p.gender}">${p.gender==='L'?'Laki-laki':'Perempuan'}</span>
+      ${p.death? '<span class="pill pill-alm">Alm.</span>':''}
+    </div>`;
+  // klik tunggal pada kartu = navigasi masuk ke folder anak-anaknya (folder-style).
+  // klik ganda (double click) atau klik kanan -> "Buka" = membuka kartu rincian orang tsb.
+  // Klik tunggal DITUNDA sebentar (250ms): kalau klik kedua datang cepat (dblclick),
+  // aksi navigasi folder dibatalkan dan diganti buka kartu rincian. Ini perlu karena
+  // klik tunggal me-render ulang kartu, sehingga kartu lama hilang sebelum dblclick sempat terdeteksi.
+  card.onclick = ()=>{
+    if(card._clickTimer){ clearTimeout(card._clickTimer); card._clickTimer = null; return; }
+    card._clickTimer = setTimeout(()=>{
+      card._clickTimer = null;
+      currentId = id;
+      expanded.add(id);
+      render();
+    }, 250);
+  };
+  card.ondblclick = ()=>{
+    if(card._clickTimer){ clearTimeout(card._clickTimer); card._clickTimer = null; }
+    openDetail(id);
+  };
+  // tombol kecil di pojok kartu yang navigasi ke daftar keturunannya (folder-style),
+  // dipisah dengan stopPropagation supaya tidak memicu openDetail.
+  const navBtn = card.querySelector('.open-desc-btn');
+  if(navBtn){
+    navBtn.onclick = (e)=>{ e.stopPropagation(); currentId=id; expanded.add(id); render(); };
+  }
+  card.oncontextmenu = (e)=>{ e.preventDefault(); openCtxMenu(e, id); };
+  // Seret & lepas untuk mengubah URUTAN anak (siblingOrder) di folder ini saja —
+  // tidak pernah mengubah data orang tua siapa pun.
+  card.draggable = true;
+  card.dataset.id = id;
+  card.addEventListener('dragstart', e=>{ e.stopPropagation(); card.classList.add('dragging'); e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed='move'; });
+  card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
+  card.addEventListener('dragover', e=>{ e.preventDefault(); card.classList.add('drag-over'); });
+  card.addEventListener('dragleave', ()=> card.classList.remove('drag-over'));
+  card.addEventListener('drop', e=>{
+    e.preventDefault(); e.stopPropagation();
+    card.classList.remove('drag-over');
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if(draggedId && draggedId !== id) reorderSiblingBeforeTarget(draggedId, id);
+  });
+  return card;
 }
 
 /* ================= TAMPILAN POHON (org chart) =================
@@ -977,7 +1102,10 @@ function openDetail(id){
         return romawi.map((r, idx)=>{
           const sid = p.spouses[idx];
           if(sid && people[sid]){
-            return `<div class="panel-row"><span>Pasangan ${r}</span><span><a href="#" onclick="openDetail('${sid}');return false;">${escapeHtml(people[sid].name)}</a></span></div>`;
+            return `<div class="panel-row"><span>Pasangan ${r}</span><span style="display:flex;align-items:center;gap:8px;">
+              <a href="#" onclick="openDetail('${sid}');return false;">${escapeHtml(people[sid].name)}</a>
+              <button class="btn btn-ghost btn-sm" style="color:var(--maroon);border-color:var(--maroon);" title="Hapus status pasangan ini" onclick="openRemoveSpouseModal('${id}','${sid}')">🗑️</button>
+            </span></div>`;
           }
           if(idx === p.spouses.length && p.spouses.length < 4){
             return `<div class="panel-row"><span>Pasangan ${r}</span><span><button class="btn btn-ghost btn-sm" onclick="enterAddSpouseMode('${id}')">＋ Tambah pasangan</button></span></div>`;
@@ -1187,8 +1315,20 @@ function enterAddChildMode(parentId){
   }
   editingMode = true;
   const parent = people[parentId];
-  const spouseIds = parent.spouses || [];
+  const spouseIds = (parent.spouses || []).filter(s=>people[s]);
   const parentNames = escapeHtml([parent.name, ...spouseIds.map(s=>people[s].name)].join(' & '));
+  // Kalau orang tua ini tercatat punya LEBIH DARI SATU pasangan, wajib pilih tepat satu
+  // pasangan sebagai ayah/ibu kandung anak baru ini - supaya anak langsung masuk ke grup
+  // 💍 yang benar, tidak tercampur seperti data lama.
+  const spousePicker = spouseIds.length > 1 ? `
+      <div class="panel-section-title">Anak ini bersama pasangan yang mana?</div>
+      <div class="panel-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+        ${spouseIds.map((sid,idx)=>`
+          <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
+            <input type="radio" name="f_ch_spouse" value="${sid}" ${idx===0?'checked':''}>
+            💍 ${escapeHtml(people[sid].name)}
+          </label>`).join('')}
+      </div>` : '';
   document.getElementById('detailPanel').innerHTML = `
     <div class="panel-header">
       <div class="avatar" style="background:${genColors[0]}">＋</div>
@@ -1198,6 +1338,7 @@ function enterAddChildMode(parentId){
       </div>
     </div>
     <div class="panel-body">
+      ${spousePicker}
       <div class="panel-section-title">Data Diri</div>
       <div class="panel-row"><span>Nama lengkap</span><input id="f_ch_name" type="text" placeholder="Nama lengkap"></div>
       <div class="panel-row"><span>Jenis kelamin</span>
@@ -1233,7 +1374,15 @@ function saveAddChild(parentId){
   const name = val('f_ch_name');
   if(!name){ alert('Nama anggota wajib diisi.'); return; }
   const parent = people[parentId];
-  const parentIds = [parentId, ...(parent.spouses||[])];
+  const spouseIds = (parent.spouses || []).filter(s=>people[s]);
+  let parentIds;
+  if(spouseIds.length > 1){
+    const picked = document.querySelector('input[name="f_ch_spouse"]:checked');
+    if(!picked){ alert('Pilih dulu anak ini bersama pasangan yang mana.'); return; }
+    parentIds = [parentId, picked.value];
+  } else {
+    parentIds = [parentId, ...spouseIds];
+  }
   const newId = 'ch_' + parentId + '_' + Date.now();
   const existingSiblings = childrenOf(parentId); // sudah urut & sudah termigrasi
   const nextOrder = existingSiblings.length
@@ -1703,6 +1852,155 @@ function openCatatan(){
   document.getElementById('modalOverlay').classList.add('show');
 }
 
+/* ===== Tentukan Ibu/Ayah (bereskan data anak lama yang masih tercampur) =====
+   Dipakai untuk anak yang parents[]-nya masih mencatat SEMUA pasangan dari ayah/ibu utamanya
+   sekaligus (data lama, sebelum grup 💍 ada) - lewat sini pengguna memilih satu pasangan yang
+   benar sebagai ayah/ibu kandungnya, supaya anak itu pindah ke grup 💍 yang tepat. */
+function openAssignParentModal(childId){
+  const child = people[childId];
+  if(!child){ return; }
+  const primaryId = (child.parents||[])[0];
+  const primary = primaryId ? people[primaryId] : null;
+  if(!primary || (primary.spouses||[]).filter(s=>people[s]).length < 2){
+    alert(`${primary? escapeHtml(primary.name)+' hanya' : 'Orang tua ini'} tercatat punya satu pasangan saja, jadi tidak perlu ditentukan lagi.`);
+    return;
+  }
+  const spouseIds = primary.spouses.filter(s=>people[s]);
+  const currentCoParents = (child.parents||[]).filter(p=>p!==primaryId);
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[3]}">💍</div>
+      <div>
+        <h3>Tentukan Ibu/Ayah</h3>
+        <p>${escapeHtml(child.name)} anak dari ${escapeHtml(primary.name)} bersama...</p>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="panel-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+        ${spouseIds.map(sid=>`
+          <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
+            <input type="radio" name="f_assign_spouse" value="${sid}" ${currentCoParents.length===1 && currentCoParents[0]===sid?'checked':''}>
+            💍 ${escapeHtml(people[sid].name)}
+          </label>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);">
+        Memilih salah satu akan memindahkan ${escapeHtml(child.name)} ke grup pasangan tsb saja
+        (data pasangan lain yang sebelumnya ikut tercatat sebagai orang tua akan dilepas).
+      </div>
+    </div>
+    <div class="panel-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
+      <button class="btn btn-primary" onclick="saveAssignParent('${childId}','${primaryId}')">Simpan</button>
+    </div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function saveAssignParent(childId, primaryId){
+  const picked = document.querySelector('input[name="f_assign_spouse"]:checked');
+  if(!picked){ alert('Pilih dulu salah satu pasangan.'); return; }
+  const child = people[childId];
+  const before = (child.parents||[]).map(pid=>people[pid]?people[pid].name:pid).join(' & ');
+  child.parents = [primaryId, picked.value];
+  closeModal();
+  savePersonToDB(childId);
+  logAudit('edit', childId, `Menentukan ibu/ayah ${child.name}: ${before} -> ${people[primaryId].name} & ${people[picked.value].name}`);
+  render();
+}
+
+/* ===== Hapus Pasangan (melepas status menikah antara dua orang) =====
+   Tidak menghapus kartu si pasangan, hanya melepas tautan spouses[] di kedua sisi.
+   Data anak yang sudah tercatat TIDAK ikut berubah - kalau ada anak yang tercatat
+   bersama pasangan ini, grup 💍-nya tetap tampil di daftar anak selama datanya
+   masih menyebut pasangan ini sebagai orang tua (bisa dipindah lewat "Tentukan Ibu/Ayah"). */
+function openRemoveSpouseModal(personId, spouseId){
+  const person = people[personId], spouse = people[spouseId];
+  if(!person || !spouse) return;
+  const groups = getSpouseGroups(personId);
+  const kidsCount = groups ? (groups.find(g=>g.spouseId===spouseId)||{kids:[]}).kids.length
+                            : childrenOf(personId).filter(k=>(people[k].parents||[]).includes(spouseId)).length;
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[4]}">💔</div>
+      <div>
+        <h3>Hapus Pasangan</h3>
+        <p>Melepas status pasangan ${escapeHtml(person.name)} &amp; ${escapeHtml(spouse.name)}</p>
+      </div>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:12.5px;line-height:1.6;margin:0;">
+        Ini hanya melepas status "menikah" antara <b>${escapeHtml(person.name)}</b> dan
+        <b>${escapeHtml(spouse.name)}</b>. Kartu ${escapeHtml(spouse.name)} tidak ikut terhapus.
+        ${kidsCount? `<br><br>⚠️ Ada <b>${kidsCount}</b> anak yang tercatat bersama pasangan ini - data anak tsb TIDAK ikut berubah, grup 💍-nya tetap tampil apa adanya.` : ''}
+      </p>
+    </div>
+    <div class="panel-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
+      <button class="btn btn-primary" style="background:var(--maroon);" onclick="confirmRemoveSpouse('${personId}','${spouseId}')">Ya, Hapus Pasangan</button>
+    </div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function confirmRemoveSpouse(personId, spouseId){
+  const person = people[personId], spouse = people[spouseId];
+  if(!person || !spouse) return;
+  person.spouses = (person.spouses||[]).filter(s=>s!==spouseId);
+  spouse.spouses = (spouse.spouses||[]).filter(s=>s!==personId);
+  closeModal();
+  savePersonToDB(personId);
+  savePersonToDB(spouseId);
+  logAudit('edit', personId, `Menghapus status pasangan: ${person.name} & ${spouse.name}`);
+  const reopenDetail = document.getElementById('overlay').classList.contains('show');
+  render();
+  if(reopenDetail) openDetail(personId);
+}
+
+/* ===== Pindahkan banyak anak sekaligus ke satu pasangan (bulk) =====
+   Dipakai dari header grup ⚠️/"belum ditentukan" di daftar kartu anak, supaya tidak perlu
+   klik kanan satu-satu untuk anak-anak lama yang datanya masih tercampur/belum tercatat. */
+function openBulkAssignModal(personId, kidIds){
+  const person = people[personId];
+  const spouseIds = (person.spouses||[]).filter(s=>people[s]);
+  if(!person || spouseIds.length < 2 || !kidIds.length) return;
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[3]}">💍</div>
+      <div>
+        <h3>Tetapkan ${kidIds.length} Anak Sekaligus</h3>
+        <p>Pilih pasangan ${escapeHtml(person.name)} yang benar untuk semua anak di grup ini</p>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="panel-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+        ${spouseIds.map((sid,idx)=>`
+          <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
+            <input type="radio" name="f_bulk_spouse" value="${sid}" ${idx===0?'checked':''}>
+            💍 ${escapeHtml(people[sid].name)}
+          </label>`).join('')}
+      </div>
+      <div style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);">
+        Semua ${kidIds.length} anak berikut akan dipindah sekaligus ke pasangan yang dipilih:
+        <div style="margin-top:6px;">${kidIds.map(k=>escapeHtml(people[k].name)).join(', ')}</div>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Batal</button>
+      <button class="btn btn-primary" onclick="confirmBulkAssign('${personId}', ${JSON.stringify(kidIds)})">Simpan</button>
+    </div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function confirmBulkAssign(personId, kidIds){
+  const picked = document.querySelector('input[name="f_bulk_spouse"]:checked');
+  if(!picked){ alert('Pilih dulu salah satu pasangan.'); return; }
+  const spouseId = picked.value;
+  kidIds.forEach(childId=>{
+    const child = people[childId];
+    if(!child) return;
+    child.parents = [personId, spouseId];
+    savePersonToDB(childId);
+  });
+  closeModal();
+  logAudit('edit', personId, `Menetapkan ${kidIds.length} anak sekaligus ke pasangan ${people[spouseId].name}`);
+  render();
+}
+
 function openProfileEditor(){
   const p = currentUserProfile || {name:'', region:''};
   document.getElementById('modalPanel').innerHTML = `
@@ -1775,6 +2073,7 @@ document.getElementById('ctxMenu').addEventListener('click',(e)=>{
   // "Tambah anak" membangun panel lengkap dari nol sendiri, jadi bisa langsung dipanggil
   // tanpa openDetail() dulu. "Jadikan kakak/adik" hanya menukar urutan tampil (siblingOrder)
   // dengan saudara persis di atas/bawahnya (naik/turun satu tingkat) — TIDAK mengubah orang tua siapa pun.
+  if(act==='assignparent'){ openAssignParentModal(id); }
   if(act==='addchild'){ enterAddChildMode(id); }
   if(act==='olderSibling'){ makeOlderSibling(id); }
   if(act==='youngerSibling'){ makeYoungerSibling(id); }

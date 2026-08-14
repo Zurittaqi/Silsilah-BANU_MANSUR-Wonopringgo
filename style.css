@@ -288,6 +288,38 @@
   /* ===== TREE VIEW (org chart, bercabang ke bawah, dengan zoom/pan) ===== */
   #cardGrid{ display:grid; }
   .view-tree #cardGrid{ display:none; }
+
+  /* ===== Pengelompokan kartu anak per-pasangan (💍) untuk orang tua ber-poligami/poliandri =====
+     #cardGrid#cardGrid dipakai supaya spesifisitasnya menang atas aturan ID polos #cardGrid{display:grid}
+     di atas, sehingga saat dikelompokkan, wadah luar jadi kolom (bukan grid kartu langsung) —
+     grid kartu sesungguhnya ada di .card-grid bagian DALAM tiap grup. */
+  #cardGrid#cardGrid.card-grid-grouped{ display:flex; flex-direction:column; gap:18px; }
+  .spouse-group{
+    border:1px dashed var(--line); border-radius:12px; padding:12px 12px 14px;
+    background:rgba(0,0,0,.015);
+  }
+  .spouse-group-warn{ border-color:#d98c2b; background:rgba(217,140,43,.06); }
+  .spouse-group-title{
+    display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px;
+    color:var(--ink); margin-bottom:10px;
+  }
+  .spouse-group-ico{ font-size:16px; }
+  .spouse-group-count{
+    margin-left:2px; font-weight:600; font-size:11.5px; color:var(--ink-soft);
+    background:var(--paper-card); border:1px solid var(--line); border-radius:999px;
+    padding:1px 8px;
+  }
+  .spouse-group-hint{
+    font-size:11px; color:#8a5a12; margin:-4px 0 10px; line-height:1.4;
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  }
+  .spouse-bulk-btn{ white-space:nowrap; }
+  .spouse-group .card-grid{ gap:11px; }
+
+  /* Baris grup 💍 di sidebar pohon keluarga - dibedakan dari baris folder orang biasa */
+  .spouse-group-row{ opacity:.92; }
+  .spouse-group-row .folder-ico{ filter:none; }
+  .spouse-group-warn .spouse-group-row{ color:#a15b00; }
   .tree-view-wrap{
     display:none; position:relative; flex:1; min-height:0;
     overflow:hidden; border-radius:10px; background:
