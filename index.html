@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Web Silsilah — Mockup Navigasi File Manager</title>
+<title>Silsilah Banu Mansur</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -12,11 +12,14 @@
 
 <!-- LOGIN SCREEN -->
 <div class="login-wrap" id="loginScreen" style="display:none;">
-  <h2>Masuk ke Silsilah Banu Mansur</h2>
+  <div class="login-brand">
+    <span class="login-brand-icon">🕌</span>
+    <h2>Silsilah Banu Mansur</h2>
+  </div>
   <p class="sub" id="loginSubtitle">Masuk dengan email keluarga untuk melihat &amp; mengedit data.</p>
   <div class="login-error" id="loginError"></div>
-  <input type="text" id="loginName" placeholder="Nama Anda (mis. Ahmad, Admin Pekalongan)" style="display:none;">
-  <input type="text" id="loginRegion" placeholder="Wilayah/Cabang (opsional, mis. Pekalongan)" style="display:none;">
+  <input type="text" id="loginName" placeholder="Nama Anda (mis. Ahmad)" style="display:none;">
+  <input type="text" id="loginRegion" placeholder="Wilayah/Cabang (opsional)" style="display:none;">
   <input type="email" id="loginEmail" placeholder="Email">
   <input type="password" id="loginPassword" placeholder="Kata sandi">
   <button class="btn btn-primary" id="loginSubmitBtn" onclick="doLogin()">Masuk</button>
@@ -29,43 +32,53 @@
   <!-- TOOLBAR -->
   <div class="toolbar">
     <div class="toolbar-row toolbar-row-1">
-      <button class="btn btn-ghost" onclick="goHome()" title="Kembali ke leluhur utama" aria-label="Kembali ke leluhur utama">🏦</button>
+      <button class="btn btn-ghost" onclick="goHome()" title="Kembali ke leluhur utama" aria-label="Kembali ke leluhur utama">🏛️</button>
 
+      <!-- Dropdown Aksi -->
       <div class="dropdown-wrap" id="aksiDropdownWrap">
         <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown('aksiDropdownWrap')" aria-haspopup="true" aria-expanded="false">⚙️ Aksi ▾</button>
         <div class="dropdown-menu" id="aksiDropdownMenu">
-          <button onclick="closeDropdowns(); openCatatan()">📝 Catatan</button>
+          <button onclick="closeDropdowns(); enterAddParentMode(currentId)">👴 Tambah Leluhur</button>
+          <button onclick="closeDropdowns(); openCatatan()">📝 Catatan Nasab</button>
           <button onclick="closeDropdowns(); openAuditLog()">📜 Riwayat Perubahan</button>
-          <button onclick="closeDropdowns(); downloadBackupJSON()" title="Unduh seluruh data silsilah sebagai file JSON (backup manual)">💾 Unduh Data</button>
-          <button onclick="closeDropdowns(); document.getElementById('restoreFileInput').click()" title="Pulihkan data dari file backup JSON yang pernah diunduh">📤 Panggil Data</button>
+          <hr>
+          <button onclick="closeDropdowns(); handleDownloadBackup()" title="Unduh seluruh data sebagai file JSON">💾 Unduh Data (Backup)</button>
+          <button onclick="closeDropdowns(); document.getElementById('restoreFileInput').click()" title="Pulihkan data dari file backup JSON">📤 Pulihkan Backup</button>
         </div>
-        <input type="file" id="restoreFileInput" accept="application/json" style="display:none" onchange="restoreFromBackupFile(this)">
+        <input type="file" id="restoreFileInput" accept="application/json" style="display:none" onchange="handleRestoreFile(this)">
       </div>
 
+      <!-- View Toggle: Grid, Pohon (Horizontal) & Pohon (Radial) -->
       <div class="view-toggle" role="group" aria-label="Pilih tampilan">
         <button class="active" id="gridBtn" title="Tampilan grid" aria-label="Tampilan grid" aria-pressed="true">❏</button>
-        <button id="treeBtn" title="Tampilan pohon (struktur organisasi)" aria-label="Tampilan pohon" aria-pressed="false">⌗</button>
+        <button id="treeBtn" title="Tampilan pohon" aria-label="Tampilan pohon" aria-pressed="false">⌗</button>
+        <button id="radialBtn" title="Tampilan pohon radial" aria-label="Tampilan pohon radial" aria-pressed="false">◎</button>
       </div>
 
       <div class="toolbar-spacer"></div>
 
-      <span class="save-status" id="saveStatus" role="status" aria-live="polite"><span class="dot2"></span><span id="saveStatusText">Tersimpan</span></span>
+      <span class="save-status" id="saveStatus" role="status" aria-live="polite">
+        <span class="dot2"></span><span id="saveStatusText">Tersimpan</span>
+      </span>
 
       <div class="search">
         <span aria-hidden="true">🔍</span>
-        <input placeholder="Cari nama di folder ini…" id="searchBox" aria-label="Cari nama" autocomplete="off">
+        <input placeholder="Cari nama…" id="searchBox" aria-label="Cari nama" autocomplete="off">
         <div class="search-global-results" id="searchGlobalResults"></div>
       </div>
 
       <div class="dropdown-wrap" id="userDropdownWrap">
-        <button class="user-chip" onclick="toggleDropdown('userDropdownWrap')">👤 <span class="chip-label" id="userEmailLabel"></span> ▾</button>
+        <button class="user-chip" onclick="toggleDropdown('userDropdownWrap')">
+          👤 <span class="chip-label" id="userEmailLabel"></span> ▾
+        </button>
         <div class="dropdown-menu dropdown-menu-right" id="userDropdownMenu">
-          <button onclick="closeDropdowns(); openProfileEditor()" title="Atur nama yang tampil di riwayat perubahan">👤 Profil</button>
+          <button onclick="closeDropdowns(); openProfileEditor()">👤 Profil</button>
           <button onclick="closeDropdowns(); doLogout()">🚪 Keluar</button>
         </div>
       </div>
     </div>
 
+    <!-- Baris 2: Kinship line (bin/binti) -->
     <div class="toolbar-row toolbar-row-2">
       <div class="kinship-line" id="kinshipLine"></div>
     </div>
@@ -73,8 +86,13 @@
 
   <!-- BODY -->
   <div class="body">
+    <!-- SIDEBAR dengan collapsible -->
     <div class="sidebar">
-      <div class="sidebar-title">Pohon Keluarga</div>
+      <div class="sidebar-header">
+        <div class="sidebar-title">Pohon Keluarga</div>
+        <button class="sidebar-collapse-all" onclick="collapseAllSidebar()" title="Tutup semua cabang">⊟</button>
+        <button class="sidebar-expand-root" onclick="expandRootSidebar()" title="Buka tingkat pertama">⊞</button>
+      </div>
       <div id="sidebarTree"></div>
     </div>
     <div class="sidebar-resizer" id="sidebarResizer" title="Seret untuk mengubah lebar sidebar"></div>
@@ -85,27 +103,27 @@
         <span class="pair" id="pairLabel"></span>
       </div>
       <div class="content-scroll">
-        <div class="empty-hint" id="emptyHint" style="display:none;">Belum ada anak yang tercatat di sini. Gunakan "Tambah Anak" untuk menambahkan.</div>
+        <div class="empty-hint" id="emptyHint" style="display:none;"></div>
         <div class="card-grid" id="cardGrid"></div>
 
-        <!-- tampilan pohon (org chart, bercabang ke bawah) dengan zoom/pan & collapse per cabang -->
+        <!-- Tree View Canvas -->
         <div class="tree-view-wrap" id="treeViewWrap">
           <div class="tree-view-canvas" id="treeViewCanvas"></div>
-          <div class="tree-hint" aria-hidden="true">Geser = pan · Cubit/Scroll = zoom · Klik ⊖/⊕ = buka/tutup cabang · Klik kartu = buka rincian</div>
-          <div class="tree-controls" role="group" aria-label="Kontrol zoom pohon keluarga">
-            <button type="button" id="treeZoomIn" title="Perbesar" aria-label="Perbesar">＋</button>
-            <button type="button" id="treeZoomOut" title="Perkecil" aria-label="Perkecil">－</button>
-            <button type="button" id="treeZoomReset" title="Atur ulang tampilan" aria-label="Atur ulang tampilan">⟳</button>
+          <div class="tree-hint" aria-hidden="true">Geser = pan · Scroll/Cubit = zoom · Klik +/− = buka/tutup</div>
+          <div class="tree-controls" role="group" aria-label="Kontrol zoom">
+            <button type="button" id="treeZoomIn"    title="Perbesar"   aria-label="Perbesar">＋</button>
+            <button type="button" id="treeZoomOut"   title="Perkecil"  aria-label="Perkecil">－</button>
+            <button type="button" id="treeZoomReset" title="Atur ulang" aria-label="Atur ulang">⟳</button>
           </div>
         </div>
       </div>
 
-      <!-- detail overlay -->
+      <!-- Detail overlay -->
       <div class="overlay" id="overlay">
         <div class="panel" id="detailPanel"></div>
       </div>
 
-      <!-- context menu -->
+      <!-- Context menu -->
       <div class="ctx-menu" id="ctxMenu">
         <button data-act="open">📂 Buka</button>
         <button data-act="edit">✏️ Edit data</button>
@@ -113,9 +131,11 @@
         <button data-act="addchild">➕ Tambah anak</button>
         <button data-act="olderSibling">⬆️ Jadikan kakak</button>
         <button data-act="youngerSibling">⬇️ Jadikan adik</button>
+        <hr>
+        <button data-act="delete" class="danger">🗑️ Hapus</button>
       </div>
 
-      <!-- modal kedua: dipakai bergantian untuk Riwayat Perubahan (audit log) & Profil -->
+      <!-- Modal kedua -->
       <div class="overlay" id="modalOverlay">
         <div class="panel" id="modalPanel" style="width:460px;"></div>
       </div>
@@ -132,34 +152,37 @@
 
 </div>
 
-<!-- ============ FIREBASE (penyimpanan permanen + login) ============
-     1) Buat project di https://console.firebase.google.com
-     2) Aktifkan "Firestore Database" (mode production/locked, lalu atur rules di bawah)
-     3) Aktifkan "Authentication" > Sign-in method > Email/Password (Enable)
-     4) Buka Project Settings > General > "Your apps" > Web app > salin firebaseConfig
-     5) Tempel nilai firebaseConfig ke bagian FIREBASE_CONFIG di bawah ini
-
-     CATATAN UNTUK FITUR RIWAYAT PERUBAHAN (AUDIT LOG):
-     - Ada 2 koleksi baru yang dipakai: "users" (profil nama/wilayah tiap kontributor)
-       dan "auditLog" (catatan tambah/ubah/hapus). Pastikan Firestore Rules mengizinkan
-       pengguna yang sudah login untuk read/write kedua koleksi ini, contoh:
-         match /users/{uid}      { allow read, write: if request.auth != null; }
-         match /auditLog/{docId} { allow read, create: if request.auth != null; }
-       ("create" saja untuk auditLog sudah cukup — riwayat sebaiknya tidak bisa diubah/dihapus
-       oleh siapa pun langsung dari aplikasi, supaya jejaknya tetap bisa dipercaya.)
-     - Untuk retensi "365 hari" secara otomatis, Firestore punya fitur TTL (Time-to-Live)
-       bawaan yang bisa diaktifkan langsung dari Firebase Console (Firestore > TTL) pada
-       field tanggal tertentu — tidak perlu Cloud Function. Field "ts" di sini memakai
-       serverTimestamp, jadi kalau mau pakai TTL, tambahkan field kedaluwarsa terpisah
-       (mis. "expireAt" = ts + 365 hari) saat menulis dokumen, karena TTL Firestore
-       butuh field Timestamp yang menyatakan "kapan boleh dihapus", bukan "kapan dibuat".
-========================================================== -->
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
+<!-- Modul aplikasi (urutan penting: db → utils → person → tree → ui → app) -->
+<script src="db.js"></script>
+<script src="utils.js"></script>
+<script src="person.js"></script>
+<script src="tree.js"></script>
+<script src="ui.js"></script>
+<script src="app.js"></script>
 
+<script>
+/* ===== Tombol sidebar collapse/expand all ===== */
+function collapseAllSidebar() {
+  expanded.clear();
+  renderSidebar();
+}
+function expandRootSidebar() {
+  rootIds.forEach(id => expanded.add(id));
+  renderSidebar();
+}
 
-  <script src="app.js"></script>
+/* ===== Tombol pohon radial: aktifkan tree view + mode radial ===== */
+document.getElementById('radialBtn').addEventListener('click', () => {
+  viewMode = 'tree';
+  document.getElementById('contentArea').classList.add('view-tree');
+  document.getElementById('gridBtn').classList.remove('active');
+  setTreeMode('radial');
+});
+</script>
 </body>
 </html>
