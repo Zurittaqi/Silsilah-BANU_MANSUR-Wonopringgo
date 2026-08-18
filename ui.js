@@ -1385,6 +1385,22 @@ async function reloadPendingList() {
     <div>${rowsHtml}</div>`;
 }
 
+function showToast(msg, type) {
+  let toast = document.getElementById('approvalToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'approvalToast';
+    toast.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:8px;font-size:13.5px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.18);transition:opacity .4s;pointer-events:none;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.background = type === 'success' ? 'var(--teal)' : 'var(--maroon)';
+  toast.style.color = '#fff';
+  toast.style.opacity = '1';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
 async function approveUser(uid, name) {
   if (!confirm(`Setujui akun "${name}" sebagai Editor?\nMereka akan bisa menambah dan mengubah data silsilah.`)) return;
   try {
@@ -1403,6 +1419,7 @@ async function approveUser(uid, name) {
       row.innerHTML = `<span style="color:var(--teal);font-size:13px;">✅ ${escapeHtml(name)} — disetujui</span>`;
       setTimeout(() => row.remove(), 2000);
     }
+    showToast(`✅ Persetujuan Editor "${name}" sukses!`, 'success');
     await reloadPendingList();
   } catch (e) {
     alert('Gagal menyetujui akun: ' + e.message);
@@ -1414,10 +1431,13 @@ async function rejectUser(uid, name) {
   const pilihan = confirm(`Tolak akun "${name}"?\n\nKlik OK → akun tetap ada tapi tetap berstatus publik (baca saja).\nKlik Batal → batalkan penolakan.`);
   if (!pilihan) return;
   try {
+    const rejectedBy = (currentUserProfile && currentUserProfile.name)
+      ? currentUserProfile.name
+      : (db_auth && db_auth.currentUser ? db_auth.currentUser.email : 'Admin');
     await db_firestore.collection('users').doc(uid).update({
-      pendingApproval: false,
+      pendingApproval: firebase.firestore.FieldValue.delete(),
       rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      rejectedBy: currentUserProfile ? currentUserProfile.name : (db_auth.currentUser ? db_auth.currentUser.email : 'Admin'),
+      rejectedBy: rejectedBy,
     });
     logAudit('reject-user', null, `Menolak akun: ${name} (${uid})`, [], currentUserProfile, db_auth?.currentUser);
     const row = document.getElementById(`pending-row-${uid}`);
@@ -1425,6 +1445,7 @@ async function rejectUser(uid, name) {
       row.innerHTML = `<span style="color:var(--maroon);font-size:13px;">❌ ${escapeHtml(name)} — ditolak (akun tetap baca saja)</span>`;
       setTimeout(() => row.remove(), 2000);
     }
+    showToast(`❌ Akun "${name}" ditolak.`, 'error');
     await reloadPendingList();
   } catch (e) {
     alert('Gagal menolak akun: ' + e.message);
