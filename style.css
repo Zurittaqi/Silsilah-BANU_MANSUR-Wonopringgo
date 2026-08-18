@@ -51,7 +51,18 @@ body {
   border: 1px solid var(--line-strong); border-radius: 16px;
   box-shadow: 0 24px 60px rgba(20,46,42,.18);
   padding: 32px 28px; text-align: center;
+  position: relative;
 }
+.login-refresh-btn {
+  position: absolute; top: 12px; right: 12px;
+  width: 30px; height: 30px;
+  background: #FFF9C4; border: 1px solid #E8DC6A;
+  border-radius: 6px; cursor: pointer;
+  font-size: 15px; color: #2B2620;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; transition: background .15s;
+}
+.login-refresh-btn:hover { background: #FFF176; }
 .login-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px; }
 .login-brand-icon { font-size: 28px; }
 .login-wrap h2 { margin: 0; font-family: 'Fraunces', serif; font-size: 20px; color: var(--sogan-dark); }
