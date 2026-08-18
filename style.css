@@ -3,7 +3,7 @@
    ============================================================ */
 :root {
   --bg-app:          #EDE6D6;
-  --bg-toolbar:      #D9EFE7;
+  --bg-toolbar:      #A8C9C0;
   --bg-sidebar:      #142E2C;
   --bg-sidebar-hover:#1D3F3B;
   --bg-sidebar-active:#2E7D74;
@@ -90,7 +90,7 @@ body {
 
 /* ===== TOOLBAR ===== */
 .toolbar {
-  background: var(--bg-toolbar); border-bottom: 1px solid var(--line);
+  background: var(--bg-toolbar); border-bottom: 1px solid var(--line-strong);
   padding: 8px 20px; display: flex; flex-direction: column; gap: 4px;
 }
 .toolbar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -114,6 +114,15 @@ body {
 .save-status.error .dot2   { background: var(--maroon); }
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; } 50% { opacity: .4; }
+}
+
+/* Banner akun pending persetujuan */
+#pendingBanner {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  background: #7A431E; color: #FFF8F0;
+  font-size: 12.5px; padding: 8px 20px; gap: 4px;
+  border-bottom: 1px solid #5A3010;
+  grid-column: 1 / -1;
 }
 
 /* Pencarian */

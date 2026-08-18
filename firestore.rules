@@ -33,8 +33,14 @@ service cloud.firestore {
         : 'publik';
     }
 
-    function isAdmin()  { return isSignedIn() && myRole() == 'admin'; }
-    function isEditor() { return isSignedIn() && (myRole() == 'admin' || myRole() == 'editor'); }
+    function isPending() {
+      return isSignedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('pendingApproval', false) == true
+        : false;
+    }
+
+    function isAdmin()  { return isSignedIn() && myRole() == 'admin' && !isPending(); }
+    function isEditor() { return isSignedIn() && (myRole() == 'admin' || myRole() == 'editor') && !isPending(); }
 
     /* ===== people/{personId} =====
        Data inti pohon keluarga. Baca: publik (termasuk tanpa login,
@@ -90,12 +96,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
 
       allow create: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.get('role', 'editor') == 'editor';
+                    && request.resource.data.get('role', 'publik') == 'publik'
+                    && request.resource.data.get('pendingApproval', true) == true;
 
       allow update: if isAdmin()
                     || (
                       isSignedIn() && request.auth.uid == uid
                       && request.resource.data.role == resource.data.role
+                      && request.resource.data.get('pendingApproval', false) == resource.data.get('pendingApproval', false)
                     );
 
       allow delete: if isAdmin();

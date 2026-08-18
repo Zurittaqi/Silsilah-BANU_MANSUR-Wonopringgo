@@ -1321,3 +1321,110 @@ async function openGuestbookViewer() {
     <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">${entries.length} kunjungan tercatat (100 terbaru)</p>
     <div>${rowsHtml}</div>`;
 }
+
+/* ===== Panel Persetujuan Akun Pending (Admin only) ===== */
+async function openPendingApprovalPanel() {
+  if (!canDelete()) return; // admin only
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:var(--teal)">⏳</div>
+      <div><h3>Persetujuan Akun</h3><p>Akun yang menunggu konfirmasi Admin</p></div>
+    </div>
+    <div class="panel-body" id="pendingPanelBody">
+      <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">Memuat…</p>
+    </div>
+    <div class="panel-footer"><button class="btn btn-ghost" onclick="closeModal()">Tutup</button></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+
+  if (!db_firestore) {
+    document.getElementById('pendingPanelBody').innerHTML =
+      `<p class="audit-empty">Firebase belum dikonfigurasi.</p>`;
+    return;
+  }
+
+  await reloadPendingList();
+}
+
+async function reloadPendingList() {
+  const body = document.getElementById('pendingPanelBody');
+  if (!body) return;
+  body.innerHTML = `<p style="color:var(--ink-soft);font-size:12px;">Memuat…</p>`;
+
+  let users = [];
+  try {
+    const snap = await db_firestore.collection('users')
+      .where('pendingApproval', '==', true).get();
+    snap.forEach(doc => users.push({ uid: doc.id, ...doc.data() }));
+  } catch (e) {
+    body.innerHTML = `<p class="audit-empty">Gagal memuat daftar akun pending.</p>`;
+    console.error(e);
+    return;
+  }
+
+  if (!users.length) {
+    body.innerHTML = `<p class="audit-empty">Tidak ada akun yang menunggu persetujuan. ✅</p>`;
+    return;
+  }
+
+  const rowsHtml = users.map(u => `
+    <div class="audit-entry" id="pending-row-${u.uid}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+      <div>
+        <b style="font-size:13px;">${escapeHtml(u.name || '(tanpa nama)')}</b>
+        <div style="font-size:12px;color:var(--ink-soft);">${escapeHtml(u.email || '-')} · ${escapeHtml(u.region || '-')}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn btn-sm" style="background:var(--teal);color:#fff;border:none;"
+          onclick="approveUser('${u.uid}', '${escapeHtml(u.name || '')}')">✅ Setujui</button>
+        <button class="btn btn-sm btn-ghost"
+          onclick="rejectUser('${u.uid}', '${escapeHtml(u.name || '')}')">❌ Tolak</button>
+      </div>
+    </div>`).join('');
+
+  body.innerHTML = `
+    <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">${users.length} akun menunggu persetujuan</p>
+    <div>${rowsHtml}</div>`;
+}
+
+async function approveUser(uid, name) {
+  if (!confirm(`Setujui akun "${name}" sebagai Editor?\nMereka akan bisa menambah dan mengubah data silsilah.`)) return;
+  try {
+    await db_firestore.collection('users').doc(uid).update({
+      role: 'editor',
+      pendingApproval: false,
+      approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      approvedBy: currentUserProfile ? currentUserProfile.name : (db_auth.currentUser ? db_auth.currentUser.email : 'Admin'),
+    });
+    logAudit('approve-user', null, `Menyetujui akun: ${name} (${uid})`, [], currentUserProfile, db_auth?.currentUser);
+    const row = document.getElementById(`pending-row-${uid}`);
+    if (row) {
+      row.innerHTML = `<span style="color:var(--teal);font-size:13px;">✅ ${escapeHtml(name)} — disetujui</span>`;
+      setTimeout(() => row.remove(), 2000);
+    }
+    await reloadPendingList();
+  } catch (e) {
+    alert('Gagal menyetujui akun: ' + e.message);
+    console.error(e);
+  }
+}
+
+async function rejectUser(uid, name) {
+  const pilihan = confirm(`Tolak akun "${name}"?\n\nKlik OK → akun tetap ada tapi tetap berstatus publik (baca saja).\nKlik Batal → batalkan penolakan.`);
+  if (!pilihan) return;
+  try {
+    await db_firestore.collection('users').doc(uid).update({
+      pendingApproval: false,
+      rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      rejectedBy: currentUserProfile ? currentUserProfile.name : (db_auth.currentUser ? db_auth.currentUser.email : 'Admin'),
+    });
+    logAudit('reject-user', null, `Menolak akun: ${name} (${uid})`, [], currentUserProfile, db_auth?.currentUser);
+    const row = document.getElementById(`pending-row-${uid}`);
+    if (row) {
+      row.innerHTML = `<span style="color:var(--maroon);font-size:13px;">❌ ${escapeHtml(name)} — ditolak (akun tetap baca saja)</span>`;
+      setTimeout(() => row.remove(), 2000);
+    }
+    await reloadPendingList();
+  } catch (e) {
+    alert('Gagal menolak akun: ' + e.message);
+    console.error(e);
+  }
+}

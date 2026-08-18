@@ -39,7 +39,12 @@ function doLogin() {
     if (!name) { errBox.textContent = 'Nama Anda wajib diisi.'; return; }
     db_auth.createUserWithEmailAndPassword(email, password)
       .then(cred => {
-        if (db_firestore) return db_firestore.collection('users').doc(cred.user.uid).set({ name, region, email, role: 'editor' });
+        if (db_firestore) return db_firestore.collection('users').doc(cred.user.uid).set({
+          name, region, email,
+          role: 'publik',
+          pendingApproval: true,
+          registeredAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
       })
       .catch(err => { errBox.textContent = terjemahErrorAuth(err); });
   } else {
@@ -87,12 +92,13 @@ function terjemahErrorAuth(err) {
 }
 
 async function loadUserProfile(uid, fallbackEmail) {
-  const fallback = { name: fallbackEmail.split('@')[0], region: '', email: fallbackEmail, role: 'editor' };
+  const fallback = { name: fallbackEmail.split('@')[0], region: '', email: fallbackEmail, role: 'publik' };
   if (!db_firestore) { currentUserProfile = fallback; return; }
   try {
     const doc = await db_firestore.collection('users').doc(uid).get();
     currentUserProfile = doc.exists ? doc.data() : fallback;
-    if (!currentUserProfile.role) currentUserProfile.role = 'editor'; // akun lama sebelum sistem role ada
+    // Akun lama (sebelum sistem role) yang tidak punya field role → anggap editor (migrasi aman)
+    if (!currentUserProfile.role) currentUserProfile.role = 'editor';
   } catch (e) {
     console.error('Gagal memuat profil:', e);
     currentUserProfile = fallback;
@@ -125,6 +131,29 @@ function applyRoleClassToBody() {
   const r = currentRole();
   document.body.classList.toggle('guest-mode',  r === 'publik');
   document.body.classList.toggle('role-editor', r === 'editor');
+}
+
+function showPendingBanner() {
+  let banner = document.getElementById('pendingBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'pendingBanner';
+    banner.innerHTML = `
+      <span>⏳ Akun Anda sedang menunggu persetujuan Admin. Saat ini Anda hanya bisa melihat data (baca saja).</span>
+      <button onclick="doLogout()" style="margin-left:12px;background:rgba(0,0,0,.15);border:none;border-radius:4px;padding:2px 10px;cursor:pointer;color:inherit;font-size:12px;">Keluar</button>`;
+    const appRoot = document.getElementById('appRoot');
+    appRoot.insertBefore(banner, appRoot.firstChild);
+  }
+  banner.style.display = 'flex';
+}
+
+function hidePendingBanner() {
+  const banner = document.getElementById('pendingBanner');
+  if (banner) banner.style.display = 'none';
+}
+
+function isPendingApproval() {
+  return !!(currentUserProfile && currentUserProfile.pendingApproval === true);
 }
 
 function showGuestbookForm() {
@@ -239,6 +268,11 @@ if (db_auth) {
       await loadUserProfile(user.uid, user.email);
       applyRoleClassToBody();
       refreshSaveStatus();
+      if (isPendingApproval()) {
+        showPendingBanner();
+      } else {
+        hidePendingBanner();
+      }
       bootApp();
     } else {
       stopRealtimeSync();
