@@ -1388,11 +1388,14 @@ async function reloadPendingList() {
 async function approveUser(uid, name) {
   if (!confirm(`Setujui akun "${name}" sebagai Editor?\nMereka akan bisa menambah dan mengubah data silsilah.`)) return;
   try {
+    const approvedBy = (currentUserProfile && currentUserProfile.name)
+      ? currentUserProfile.name
+      : (db_auth && db_auth.currentUser ? db_auth.currentUser.email : 'Admin');
     await db_firestore.collection('users').doc(uid).update({
       role: 'editor',
-      pendingApproval: false,
+      pendingApproval: firebase.firestore.FieldValue.delete(),
       approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      approvedBy: currentUserProfile ? currentUserProfile.name : (db_auth.currentUser ? db_auth.currentUser.email : 'Admin'),
+      approvedBy: approvedBy,
     });
     logAudit('approve-user', null, `Menyetujui akun: ${name} (${uid})`, [], currentUserProfile, db_auth?.currentUser);
     const row = document.getElementById(`pending-row-${uid}`);
