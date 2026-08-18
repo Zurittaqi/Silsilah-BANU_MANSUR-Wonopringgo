@@ -272,6 +272,7 @@ if (db_auth) {
         showPendingBanner();
       } else {
         hidePendingBanner();
+        if (currentRole() === 'admin') updatePendingBadge();
       }
       bootApp();
     } else {

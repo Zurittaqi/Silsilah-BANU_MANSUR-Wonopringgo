@@ -1390,7 +1390,7 @@ function showToast(msg, type) {
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'approvalToast';
-    toast.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:8px;font-size:13.5px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.18);transition:opacity .4s;pointer-events:none;';
+    toast.style.cssText = 'position:fixed;top:38%;left:50%;transform:translateX(-50%);padding:11px 26px;border-radius:8px;font-size:13.5px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.18);transition:opacity .4s;pointer-events:none;';
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
@@ -1399,6 +1399,26 @@ function showToast(msg, type) {
   toast.style.opacity = '1';
   clearTimeout(toast._timer);
   toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+async function updatePendingBadge() {
+  const badges = document.querySelectorAll('.pending-badge');
+  badges.forEach(b => b.remove());
+  if (!db_firestore) return;
+  try {
+    const snap = await db_firestore.collection('users').where('pendingApproval', '==', true).get();
+    const count = snap.size;
+    if (count === 0) return;
+    ['aksiPendingBadge', 'approvalPendingBadge'].forEach(id => {
+      const target = document.getElementById(id);
+      if (!target) return;
+      const badge = document.createElement('span');
+      badge.className = 'pending-badge';
+      badge.textContent = count > 9 ? '9+' : count;
+      target.style.position = 'relative';
+      target.appendChild(badge);
+    });
+  } catch(e) { console.warn('Gagal ambil jumlah pending:', e); }
 }
 
 async function approveUser(uid, name) {
@@ -1421,6 +1441,7 @@ async function approveUser(uid, name) {
     }
     showToast(`✅ Persetujuan Editor "${name}" sukses!`, 'success');
     await reloadPendingList();
+    updatePendingBadge();
   } catch (e) {
     alert('Gagal menyetujui akun: ' + e.message);
     console.error(e);
@@ -1447,6 +1468,7 @@ async function rejectUser(uid, name) {
     }
     showToast(`❌ Akun "${name}" ditolak.`, 'error');
     await reloadPendingList();
+    updatePendingBadge();
   } catch (e) {
     alert('Gagal menolak akun: ' + e.message);
     console.error(e);

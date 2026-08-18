@@ -52,7 +52,7 @@
 
       <!-- Dropdown Aksi -->
       <div class="dropdown-wrap" id="aksiDropdownWrap">
-        <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown('aksiDropdownWrap')" aria-haspopup="true" aria-expanded="false">⚙️ Aksi ▾</button>
+        <button id="aksiPendingBadge" class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown('aksiDropdownWrap')" aria-haspopup="true" aria-expanded="false">⚙️ Aksi ▾</button>
         <div class="dropdown-menu" id="aksiDropdownMenu">
           <button class="admin-only" onclick="closeDropdowns(); enterAddParentMode(currentId)">👴 Tambah Leluhur</button>
           <button onclick="closeDropdowns(); openCatatan()">📝 Catatan Nasab</button>
@@ -60,7 +60,7 @@
           <button onclick="closeDropdowns(); openPetaPersebaran()">🗺️ Peta Persebaran</button>
           <button class="edit-only" onclick="closeDropdowns(); openAuditLog()">📜 Riwayat Perubahan</button>
           <button class="edit-only" onclick="closeDropdowns(); openGuestbookViewer()">📖 Buku Tamu</button>
-          <button class="admin-only" onclick="closeDropdowns(); openPendingApprovalPanel()">⏳ Persetujuan Akun</button>
+          <button id="approvalPendingBadge" class="admin-only" onclick="closeDropdowns(); openPendingApprovalPanel()">⏳ Persetujuan Akun</button>
           <button class="admin-only" onclick="closeDropdowns(); openResetPasswordModal()">🔑 Reset Kata Sandi Pengguna</button>
           <hr>
           <button class="admin-only" onclick="closeDropdowns(); handleDownloadBackup()" title="Unduh seluruh data sebagai file JSON">💾 Unduh Data (Backup)</button>
