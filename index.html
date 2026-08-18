@@ -23,8 +23,24 @@
   <input type="email" id="loginEmail" placeholder="Email">
   <input type="password" id="loginPassword" placeholder="Kata sandi">
   <button class="btn btn-primary" id="loginSubmitBtn" onclick="doLogin()">Masuk</button>
+  <button type="button" class="btn btn-ghost" id="guestViewBtn" onclick="showGuestbookForm()">👁️ Lihat sebagai TAMU</button>
   <button type="button" class="login-forgot" id="forgotPasswordBtn" onclick="doForgotPassword()">Lupa kata sandi?</button>
   <div class="login-alt" id="loginToggleMode" onclick="toggleAuthMode()">Belum punya akun? Daftar di sini</div>
+</div>
+
+<!-- BUKU TAMU (sebelum masuk mode Tamu) -->
+<div class="login-wrap" id="guestbookScreen" style="display:none;">
+  <div class="login-brand">
+    <span class="login-brand-icon">📖</span>
+    <h2>Buku Tamu</h2>
+  </div>
+  <p class="sub">Isi data singkat sebelum melihat pohon keluarga sebagai tamu.</p>
+  <div class="login-error" id="guestbookError"></div>
+  <input type="text" id="guestbookName" placeholder="Nama Anda">
+  <input type="text" id="guestbookRegion" placeholder="Alamat / Wilayah">
+  <input type="text" id="guestbookContact" placeholder="Email atau No. HP">
+  <button class="btn btn-primary" id="guestbookSubmitBtn" onclick="submitGuestbookAndEnter()">Lanjut Lihat sebagai Tamu</button>
+  <div class="login-alt" onclick="hideGuestbookForm()">← Kembali ke halaman masuk</div>
 </div>
 
 <div class="app" id="appRoot" style="display:none;">
@@ -38,12 +54,16 @@
       <div class="dropdown-wrap" id="aksiDropdownWrap">
         <button class="btn btn-ghost dropdown-toggle" onclick="toggleDropdown('aksiDropdownWrap')" aria-haspopup="true" aria-expanded="false">⚙️ Aksi ▾</button>
         <div class="dropdown-menu" id="aksiDropdownMenu">
-          <button onclick="closeDropdowns(); enterAddParentMode(currentId)">👴 Tambah Leluhur</button>
+          <button class="admin-only" onclick="closeDropdowns(); enterAddParentMode(currentId)">👴 Tambah Leluhur</button>
           <button onclick="closeDropdowns(); openCatatan()">📝 Catatan Nasab</button>
-          <button onclick="closeDropdowns(); openAuditLog()">📜 Riwayat Perubahan</button>
+          <button onclick="closeDropdowns(); openStatistik()">📊 Statistik</button>
+          <button onclick="closeDropdowns(); openPetaPersebaran()">🗺️ Peta Persebaran</button>
+          <button class="edit-only" onclick="closeDropdowns(); openAuditLog()">📜 Riwayat Perubahan</button>
+          <button class="edit-only" onclick="closeDropdowns(); openGuestbookViewer()">📖 Buku Tamu</button>
+          <button class="admin-only" onclick="closeDropdowns(); openResetPasswordModal()">🔑 Reset Kata Sandi Pengguna</button>
           <hr>
-          <button onclick="closeDropdowns(); handleDownloadBackup()" title="Unduh seluruh data sebagai file JSON">💾 Unduh Data (Backup)</button>
-          <button onclick="closeDropdowns(); document.getElementById('restoreFileInput').click()" title="Pulihkan data dari file backup JSON">📤 Pulihkan Backup</button>
+          <button class="admin-only" onclick="closeDropdowns(); handleDownloadBackup()" title="Unduh seluruh data sebagai file JSON">💾 Unduh Data (Backup)</button>
+          <button class="admin-only" onclick="closeDropdowns(); document.getElementById('restoreFileInput').click()" title="Panggil (muat) data dari file backup JSON">📤 Panggil Data</button>
         </div>
         <input type="file" id="restoreFileInput" accept="application/json" style="display:none" onchange="handleRestoreFile(this)">
       </div>
@@ -72,7 +92,7 @@
           👤 <span class="chip-label" id="userEmailLabel"></span> ▾
         </button>
         <div class="dropdown-menu dropdown-menu-right" id="userDropdownMenu">
-          <button onclick="closeDropdowns(); openProfileEditor()">👤 Profil</button>
+          <button class="edit-only" onclick="closeDropdowns(); openProfileEditor()">👤 Profil</button>
           <button onclick="closeDropdowns(); doLogout()">🚪 Keluar</button>
         </div>
       </div>
@@ -126,13 +146,13 @@
       <!-- Context menu -->
       <div class="ctx-menu" id="ctxMenu">
         <button data-act="open">📂 Buka</button>
-        <button data-act="edit">✏️ Edit data</button>
-        <button data-act="assignparent">💍 Tentukan Ibu/Ayah</button>
-        <button data-act="addchild">➕ Tambah anak</button>
-        <button data-act="olderSibling">⬆️ Jadikan kakak</button>
-        <button data-act="youngerSibling">⬇️ Jadikan adik</button>
-        <hr>
-        <button data-act="delete" class="danger">🗑️ Hapus</button>
+        <button data-act="edit" class="edit-only">✏️ Edit data</button>
+        <button data-act="assignparent" class="edit-only">💍 Tentukan Ibu/Ayah</button>
+        <button data-act="addchild" class="edit-only">➕ Tambah anak</button>
+        <button data-act="olderSibling" class="edit-only">⬆️ Jadikan kakak</button>
+        <button data-act="youngerSibling" class="edit-only">⬇️ Jadikan adik</button>
+        <hr class="edit-only">
+        <button data-act="delete" class="danger admin-only">🗑️ Hapus</button>
       </div>
 
       <!-- Modal kedua -->

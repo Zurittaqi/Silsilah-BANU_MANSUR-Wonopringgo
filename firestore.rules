@@ -1,0 +1,138 @@
+rules_version = '2';
+
+/* ============================================================
+   Firestore Security Rules — Silsilah Banu Mansur
+   ============================================================
+   Peran (role), disimpan di dokumen users/{uid}.role:
+     - admin  : penguasaan penuh (baca, tulis, hapus, kelola user)
+     - editor : baca, tulis, tambah & edit anggota keluarga
+                (role default untuk akun baru yang mendaftar sendiri)
+     - (tanpa akun / tidak login) : publik, hanya baca
+
+   Cara menjadikan seseorang admin:
+     Firebase Console → Firestore Database → koleksi "users" →
+     buka dokumen dengan ID = UID pengguna tsb → ubah field
+     role dari "editor" menjadi "admin".
+   ============================================================ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ===== Helper functions ===== */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Membaca role dari dokumen users/{uid} milik pengguna yang sedang login.
+    // Kalau dokumennya belum ada / belum punya field role, dianggap bukan admin/editor
+    // (fail-closed: lebih aman default ke publik daripada default ke akses penuh).
+    function myRole() {
+      return isSignedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'publik')
+        : 'publik';
+    }
+
+    function isAdmin()  { return isSignedIn() && myRole() == 'admin'; }
+    function isEditor() { return isSignedIn() && (myRole() == 'admin' || myRole() == 'editor'); }
+
+    /* ===== people/{personId} =====
+       Data inti pohon keluarga. Baca: publik (termasuk tanpa login,
+       untuk fitur "Lihat sebagai Tamu"). Tulis: editor & admin.
+       Hapus: admin saja. */
+    match /people/{personId} {
+      allow read: if true;
+
+      allow create: if isEditor()
+                    && request.resource.data.keys().hasAll(['name'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    // revision harus dimulai dari angka (dijaga naik oleh aplikasi, bukan rules,
+                    // supaya tidak perlu membaca dokumen lama saat create)
+                    && request.resource.data.get('revision', 0) is int;
+
+      allow update: if request.resource.data.keys().hasAll(['name'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && (
+                      // Alur normal (editor/admin, lewat form edit aplikasi):
+                      // revisi baru wajib lebih besar dari revisi lama →
+                      // mencegah tulisan "mundur" yang menimpa perubahan orang lain
+                      // tanpa melalui pengecekan konflik di aplikasi.
+                      (isEditor() && request.resource.data.get('revision', 0)
+                                     > resource.data.get('revision', -1))
+                      // Alur pemulihan backup (admin saja): boleh menimpa revision
+                      // apa pun, karena tujuannya memang mengganti seluruh data.
+                      || isAdmin()
+                    );
+
+      allow delete: if isAdmin();
+    }
+
+    /* ===== meta/tree =====
+       Menyimpan daftar rootIds (akar-akar leluhur). Baca publik,
+       tulis oleh editor & admin. */
+    match /meta/{docId} {
+      allow read: if true;
+      allow write: if isEditor();
+    }
+
+    /* ===== users/{uid} =====
+       Profil pengguna (nama, wilayah, email, role).
+       - Baca: hanya pengguna yang sudah login (dibutuhkan untuk
+         menampilkan siapa yang mengubah data / audit log).
+       - Buat dokumen sendiri: boleh, TAPI role dipaksa 'editor'
+         (mencegah pengguna baru mendaftarkan dirinya sebagai admin).
+       - Ubah data sendiri (nama/wilayah): boleh, TAPI tidak boleh
+         mengubah field role miliknya sendiri.
+       - Ubah role siapa pun: hanya admin. */
+    match /users/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.get('role', 'editor') == 'editor';
+
+      allow update: if isAdmin()
+                    || (
+                      isSignedIn() && request.auth.uid == uid
+                      && request.resource.data.role == resource.data.role
+                    );
+
+      allow delete: if isAdmin();
+    }
+
+    /* ===== auditLog/{entryId} =====
+       Riwayat perubahan. Baca & tulis (tambah entri baru) oleh
+       editor & admin saja — bukan konsumsi publik, dan tidak pernah
+       diubah/dihapus setelah dibuat (jejak audit harus utuh). */
+    match /auditLog/{entryId} {
+      allow read:   if isEditor();
+      allow create: if isEditor();
+      allow update, delete: if false;
+    }
+
+    /* ===== guestbook/{entryId} =====
+       Buku tamu: nama, alamat/wilayah, kontak (email ATAU no. HP)
+       pengunjung yang membuka aplikasi tanpa akun ("Lihat sebagai
+       Tamu"). Siapa pun (termasuk tanpa login) boleh MENAMBAH satu
+       entri untuk dirinya sendiri — tapi tidak boleh membaca entri
+       siapa pun (privasi pengunjung lain), tidak boleh mengubah, dan
+       tidak boleh menghapus. Hanya admin & editor yang boleh membaca
+       daftar buku tamu. */
+    match /guestbook/{entryId} {
+      allow read: if isEditor();
+
+      allow create: if request.resource.data.keys().hasAll(['name', 'region', 'contact'])
+                    && request.resource.data.name    is string && request.resource.data.name.size()    > 0
+                    && request.resource.data.region  is string && request.resource.data.region.size()  > 0
+                    && request.resource.data.contact is string && request.resource.data.contact.size() > 0;
+
+      allow update, delete: if isAdmin();
+    }
+
+    /* Default: tolak semua yang tidak cocok aturan di atas */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

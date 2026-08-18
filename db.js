@@ -178,12 +178,50 @@ function trackSave(promise) {
 window.addEventListener('online',  refreshSaveStatus);
 window.addEventListener('offline', refreshSaveStatus);
 
-async function savePersonToDB(id, data) {
+/* ===== Simpan orang: IndexedDB + Firebase, dengan metadata revisi otomatis =====
+   Setiap panggilan savePersonToDB menaikkan `revision` +1 dan mencatat
+   `updatedAt`/`updatedBy`, supaya field revisi selalu konsisten di
+   semua alur (edit manual, tambah anak, tambah pasangan, dst).
+   `actorProfile`/`actorUser` opsional — kalau tidak diisi, dicoba ambil
+   dari currentUserProfile/db_auth.currentUser secara global. */
+async function savePersonToDB(id, data, actorProfile, actorUser) {
+  const profile = actorProfile !== undefined ? actorProfile : (typeof currentUserProfile !== 'undefined' ? currentUserProfile : null);
+  const user    = actorUser    !== undefined ? actorUser    : (db_auth ? db_auth.currentUser : null);
+  const payload = {
+    ...data,
+    revision: (data.revision || 0) + 1,
+    updatedAt: db_firestore ? firebase.firestore.FieldValue.serverTimestamp() : Date.now(),
+    updatedBy: profile ? profile.name : (user ? user.email : 'Tidak diketahui'),
+  };
+  // Mutasi objek asli di memori supaya pemanggil (people[id]) tetap sinkron
+  Object.assign(data, payload);
   // 1. Tulis ke IndexedDB (langsung, lokal, selalu berhasil)
-  await idbPutPerson(id, data).catch(e => console.warn('IndexedDB write gagal:', e));
+  await idbPutPerson(id, payload).catch(e => console.warn('IndexedDB write gagal:', e));
   // 2. Kirim ke Firebase (async, bisa gagal kalau offline)
   if (db_firestore) {
-    trackSave(db_firestore.collection('people').doc(id).set(data)).catch(() => {});
+    trackSave(db_firestore.collection('people').doc(id).set(payload)).catch(() => {});
+  }
+  return payload;
+}
+
+/* ===== Cek konflik revisi sebelum menyimpan =====
+   Mengambil dokumen terbaru dari Firestore untuk dibandingkan
+   revision-nya dengan yang dilihat pengguna saat form edit dibuka.
+   Mengembalikan { conflict: false } atau { conflict: true, cloudData }. */
+async function checkRevisionConflict(id, localRevision) {
+  if (!db_firestore) return { conflict: false };
+  try {
+    const doc = await db_firestore.collection('people').doc(id).get();
+    if (!doc.exists) return { conflict: false };
+    const cloudData = doc.data();
+    const cloudRevision = cloudData.revision || 0;
+    if ((localRevision || 0) !== cloudRevision) {
+      return { conflict: true, cloudData };
+    }
+    return { conflict: false };
+  } catch (e) {
+    console.warn('Gagal memeriksa revisi (mode offline?):', e);
+    return { conflict: false };
   }
 }
 

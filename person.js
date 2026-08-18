@@ -205,6 +205,7 @@ function reorderSiblingBeforeTarget(draggedId, targetId, currentId) {
 }
 
 function makeOlderSibling(id) {
+  if (!canEdit()) return false;
   if (!people[id].parents.length) {
     const idx = rootIds.indexOf(id);
     if (idx <= 0) return;
@@ -224,6 +225,7 @@ function makeOlderSibling(id) {
 }
 
 function makeYoungerSibling(id) {
+  if (!canEdit()) return false;
   if (!people[id].parents.length) {
     const idx = rootIds.indexOf(id);
     if (idx === -1 || idx >= rootIds.length - 1) return;

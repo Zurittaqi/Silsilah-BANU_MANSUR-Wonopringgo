@@ -39,7 +39,7 @@ function doLogin() {
     if (!name) { errBox.textContent = 'Nama Anda wajib diisi.'; return; }
     db_auth.createUserWithEmailAndPassword(email, password)
       .then(cred => {
-        if (db_firestore) return db_firestore.collection('users').doc(cred.user.uid).set({ name, region, email });
+        if (db_firestore) return db_firestore.collection('users').doc(cred.user.uid).set({ name, region, email, role: 'editor' });
       })
       .catch(err => { errBox.textContent = terjemahErrorAuth(err); });
   } else {
@@ -49,6 +49,14 @@ function doLogin() {
 }
 
 function doLogout() {
+  if (isGuestMode) {
+    isGuestMode = false;
+    stopRealtimeSync();
+    document.body.classList.remove('guest-mode', 'role-editor');
+    document.getElementById('appRoot').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'block';
+    return;
+  }
   if (db_auth) db_auth.signOut();
 }
 
@@ -79,15 +87,104 @@ function terjemahErrorAuth(err) {
 }
 
 async function loadUserProfile(uid, fallbackEmail) {
-  const fallback = { name: fallbackEmail.split('@')[0], region: '', email: fallbackEmail };
+  const fallback = { name: fallbackEmail.split('@')[0], region: '', email: fallbackEmail, role: 'editor' };
   if (!db_firestore) { currentUserProfile = fallback; return; }
   try {
     const doc = await db_firestore.collection('users').doc(uid).get();
     currentUserProfile = doc.exists ? doc.data() : fallback;
+    if (!currentUserProfile.role) currentUserProfile.role = 'editor'; // akun lama sebelum sistem role ada
   } catch (e) {
     console.error('Gagal memuat profil:', e);
     currentUserProfile = fallback;
   }
+}
+
+/* ===== Role & mode tamu =====
+   admin  : penguasaan penuh (baca, tulis, hapus)
+   editor : baca, tulis, tambah & edit anggota keluarga (default akun baru)
+   publik : hanya baca (baik lewat "Lihat sebagai Tamu" maupun akun berrole 'publik') */
+let isGuestMode = false;
+
+function currentRole() {
+  if (isGuestMode) return 'publik';
+  return (currentUserProfile && currentUserProfile.role) || 'publik';
+}
+function guardOrAlert(ok, msg) {
+  if (!ok) alert(msg);
+  return ok;
+}
+function canEdit()   { return guardOrAlert(['admin', 'editor'].includes(currentRole()), 'Anda masuk sebagai Tamu/Publik (baca saja). Masuk dengan akun Editor atau Admin untuk mengubah data.'); }
+function canDelete() { return guardOrAlert(currentRole() === 'admin', 'Hanya Admin yang dapat menghapus data.'); }
+function canAddRoot() { return guardOrAlert(currentRole() === 'admin', 'Hanya Admin yang dapat menambah leluhur/akar baru.'); }
+function canResetPassword() { return guardOrAlert(currentRole() === 'admin', 'Hanya Admin yang dapat mereset kata sandi pengguna lain.'); }
+
+/* Terapkan class CSS sesuai role, untuk menyembunyikan tombol yang tidak diizinkan:
+   - guest-mode  : role publik/tamu → sembunyikan .edit-only DAN .admin-only
+   - role-editor : role editor      → sembunyikan .admin-only saja (tetap boleh .edit-only) */
+function applyRoleClassToBody() {
+  const r = currentRole();
+  document.body.classList.toggle('guest-mode',  r === 'publik');
+  document.body.classList.toggle('role-editor', r === 'editor');
+}
+
+function showGuestbookForm() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('guestbookScreen').style.display = 'block';
+  document.getElementById('guestbookError').textContent = '';
+}
+
+function hideGuestbookForm() {
+  document.getElementById('guestbookScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'block';
+}
+
+async function submitGuestbookAndEnter() {
+  const errBox = document.getElementById('guestbookError');
+  errBox.textContent = '';
+  const name    = document.getElementById('guestbookName').value.trim();
+  const region  = document.getElementById('guestbookRegion').value.trim();
+  const contact = document.getElementById('guestbookContact').value.trim();
+  if (!name)   { errBox.textContent = 'Nama wajib diisi.'; return; }
+  if (!region) { errBox.textContent = 'Alamat/Wilayah wajib diisi.'; return; }
+
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+  const isPhone = /^(\+?\d[\d\s-]{7,14}\d)$/.test(contact);
+  if (!contact || (!isEmail && !isPhone)) {
+    errBox.textContent = 'Isi email yang valid atau nomor HP yang valid.';
+    return;
+  }
+
+  const btn = document.getElementById('guestbookSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+
+  if (db_firestore) {
+    try {
+      await db_firestore.collection('guestbook').add({
+        name, region, contact,
+        contactType: isEmail ? 'email' : 'phone',
+        ts: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('Gagal mencatat buku tamu (tetap lanjut sebagai tamu):', e);
+    }
+  }
+
+  btn.disabled = false; btn.textContent = 'Lanjut Lihat sebagai Tamu';
+  document.getElementById('guestbookScreen').style.display = 'none';
+  enterGuestMode(name);
+}
+
+function enterGuestMode(guestName) {
+  isGuestMode = true;
+  currentUserProfile = null;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('guestbookScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'grid';
+  applyRoleClassToBody();
+  const label = document.getElementById('userEmailLabel');
+  if (label) label.textContent = guestName ? `Tamu: ${guestName}` : 'Tamu (baca saja)';
+  refreshSaveStatus();
+  bootApp();
 }
 
 /* ===== Dropdown toolbar ===== */
@@ -130,21 +227,26 @@ async function bootApp() {
 }
 
 if (db_auth) {
-  db_auth.onAuthStateChanged(user => {
+  db_auth.onAuthStateChanged(async user => {
     const loginScreen = document.getElementById('loginScreen');
     const appRoot     = document.getElementById('appRoot');
     if (user) {
+      isGuestMode = false;
       loginScreen.style.display = 'none';
       appRoot.style.display = 'grid';
       const label = document.getElementById('userEmailLabel');
       if (label) label.textContent = user.email;
-      loadUserProfile(user.uid, user.email);
+      await loadUserProfile(user.uid, user.email);
+      applyRoleClassToBody();
       refreshSaveStatus();
       bootApp();
     } else {
       stopRealtimeSync();
       currentUserProfile = null;
+      isGuestMode = false;
+      document.body.classList.remove('guest-mode', 'role-editor');
       appRoot.style.display = 'none';
+      document.getElementById('guestbookScreen').style.display = 'none';
       loginScreen.style.display = 'block';
     }
   });
@@ -161,10 +263,12 @@ if (db_auth) {
 
 /* ===== Backup & Restore ===== */
 function handleDownloadBackup() {
+  if (!canDelete()) return; // unduh backup = admin only
   downloadBackupJSON(people, rootIds);
 }
 
 function handleRestoreFile(inputEl) {
+  if (!canDelete()) { inputEl.value = ''; return; } // restore = mengganti seluruh data, setara aksi Admin
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
   const resetInput = () => { inputEl.value = ''; };

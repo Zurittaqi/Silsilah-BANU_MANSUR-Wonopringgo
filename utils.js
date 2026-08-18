@@ -89,8 +89,9 @@ function formatTglLahir(input) {
 
 /* ===== Audit timestamp ===== */
 function formatAuditTimestamp(ts) {
-  if (!ts || !ts.toDate) return 'baru saja';
-  const d     = ts.toDate();
+  if (!ts) return 'baru saja';
+  const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+  if (isNaN(d.getTime())) return 'baru saja';
   const hh    = String(d.getHours()).padStart(2, '0');
   const mm    = String(d.getMinutes()).padStart(2, '0');
   return `${d.getDate()} ${BULAN_MASEHI[d.getMonth()]} ${d.getFullYear()} ${hh}:${mm}`;

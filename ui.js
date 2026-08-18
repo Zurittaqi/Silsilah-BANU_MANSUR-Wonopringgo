@@ -93,6 +93,7 @@ function buildCollapsibleNode(id, depth = 0) {
 
   row.onclick = e => {
     e.stopPropagation();
+    closeAllOverlays(true); // true = jangan render sidebar dulu, render() di bawah akan menanganinya
     if (row._clickTimer) { clearTimeout(row._clickTimer); row._clickTimer = null; return; }
     row._clickTimer = setTimeout(() => {
       row._clickTimer = null;
@@ -143,6 +144,7 @@ function buildSpouseGroupNode(personId, group, depth = 1) {
 
   row.onclick = e => {
     e.stopPropagation();
+    closeAllOverlays(true);
     if (isOpen) expanded.delete(groupKey); else expanded.add(groupKey);
     navigateToGroup(personId, groupKey);
     render();
@@ -194,12 +196,12 @@ function openDetail(id) {
             return `<div class="panel-row"><span>Pasangan ${r}</span>
               <span>
                 <a href="#" onclick="openDetail('${sid}');return false;">${escapeHtml(people[sid].name)}</a>
-                <button class="spouse-unlink-btn" title="Hapus status pasangan" onclick="openRemoveSpouseModal('${id}','${sid}')">💔</button>
+                <button class="spouse-unlink-btn edit-only" title="Hapus status pasangan" onclick="openRemoveSpouseModal('${id}','${sid}')">💔</button>
               </span></div>`;
           }
           if (idx === p.spouses.length && p.spouses.length < 4) {
             return `<div class="panel-row"><span>Pasangan ${r}</span>
-              <span><button class="btn btn-ghost btn-sm" onclick="enterAddSpouseMode('${id}')">＋ Tambah pasangan</button></span></div>`;
+              <span><button class="btn btn-ghost btn-sm edit-only" onclick="enterAddSpouseMode('${id}')">＋ Tambah pasangan</button></span></div>`;
           }
           return '';
         }).join('');
@@ -220,9 +222,9 @@ function openDetail(id) {
       }</span></div>
     </div>
     <div class="panel-footer">
-      <button class="btn btn-text" onclick="enterAddChildMode('${id}')">Tambah Anak</button>
+      <button class="btn btn-text edit-only" onclick="enterAddChildMode('${id}')">Tambah Anak</button>
       <button class="btn btn-ghost btn-flex" onclick="closeDetail()"><span class="btn-full">Tutup</span><span class="btn-short">T</span></button>
-      <button class="btn btn-primary btn-flex" onclick="enterEditMode('${id}')"><span class="btn-full">Edit data</span><span class="btn-short">E</span></button>
+      <button class="btn btn-primary btn-flex edit-only" onclick="enterEditMode('${id}')"><span class="btn-full">Edit data</span><span class="btn-short">E</span></button>
     </div>`;
 
   editingMode = false;
@@ -231,11 +233,7 @@ function openDetail(id) {
 }
 
 function closeDetail() {
-  editingMode = false;
-  document.getElementById('overlay').classList.remove('show');
-  document.removeEventListener('click', outsideClickCloseDetail, true);
-  highlightedId = null;
-  renderSidebar();
+  closeAllOverlays(false);
 }
 
 function outsideClickCloseDetail(e) {
@@ -245,9 +243,16 @@ function outsideClickCloseDetail(e) {
 }
 
 /* ===== Mode Edit ===== */
+let editingRevision  = null; // revisi yang dilihat pengguna saat form edit dibuka (untuk deteksi konflik)
+let editingSnapshot  = null; // salinan data orang saat form dibuka, dipakai untuk log "before" yang akurat
+                              // (people[id] bisa berubah di memori akibat sinkronisasi realtime saat form terbuka)
+
 function enterEditMode(id) {
+  if (!canEdit()) return;
   const p = people[id];
   editingMode = true;
+  editingRevision = p.revision || 0;
+  editingSnapshot = { ...p };
   document.getElementById('detailPanel').querySelector('.panel-footer')?.remove();
   const body = document.getElementById('detailPanel').querySelector('.panel-body');
   if (body) {
@@ -286,12 +291,40 @@ function enterEditMode(id) {
   panel.appendChild(footer);
 }
 
-function saveEditMode(id) {
-  const p      = people[id];
-  const before = { ...p };
-  const val    = sel => { const el = document.getElementById(sel); return el ? el.value.trim() : ''; };
+async function saveEditMode(id) {
+  const before  = editingSnapshot || { ...people[id] };
+  const val     = sel => { const el = document.getElementById(sel); return el ? el.value.trim() : ''; };
   const newName = val('f_name');
   if (!newName) { alert('Nama lengkap wajib diisi.'); return; }
+
+  // ===== Cek konflik revisi sebelum menyimpan =====
+  const saveBtn = document.querySelector('#detailPanel .panel-footer .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Memeriksa…'; }
+  const check = await checkRevisionConflict(id, editingRevision);
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Simpan'; }
+
+  if (check.conflict) {
+    showEditConflictModal(id, check.cloudData, () => {
+      // Pengguna memilih "Timpa dengan perubahan saya" → lanjutkan simpan paksa
+      // dengan revisi cloud terbaru sebagai basis (relasi spouses/parents/children
+      // dari cloud tetap dipakai, hanya field form yang ditimpa perubahan lokal)
+      people[id] = { ...check.cloudData };
+      editingRevision = check.cloudData.revision || 0;
+      saveEditMode(id);
+    }, () => {
+      // Pengguna memilih "Muat ulang & batalkan perubahan saya"
+      people[id] = check.cloudData;
+      editingMode = false;
+      editingSnapshot = null;
+      openDetail(id);
+      render();
+    });
+    return;
+  }
+
+  // Basis objek yang disimpan: people[id] saat ini (mengandung relasi spouses/
+  // parents/children terbaru + revision terbaru), field form menimpa di atasnya.
+  const p = people[id];
   p.name    = newName;
   p.gender  = val('f_gender') || p.gender;
   p.birth   = val('f_birth');
@@ -323,18 +356,54 @@ function saveEditMode(id) {
   }
 
   editingMode = false;
-  savePersonToDB(id, people[id]);
+  editingSnapshot = null;
+  await savePersonToDB(id, people[id], currentUserProfile, db_auth?.currentUser);
   openDetail(id);
   render();
 }
 
 function cancelEditMode(id) {
   editingMode = false;
+  editingSnapshot = null;
   openDetail(id);
+}
+
+/* ===== Modal konflik edit (multi-pengguna) =====
+   Ditampilkan saat revisi lokal berbeda dari revisi di cloud —
+   artinya ada orang lain yang menyimpan perubahan pada orang yang sama
+   sejak form edit ini dibuka. */
+function showEditConflictModal(id, cloudData, onOverwrite, onDiscard) {
+  const namaTerbaru = escapeHtml(cloudData.name || people[id].name);
+  const siapa   = escapeHtml(cloudData.updatedBy || 'seseorang');
+  const kapan   = cloudData.updatedAt ? formatAuditTimestamp(cloudData.updatedAt) : 'baru saja';
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:#d98c2b">⚠️</div>
+      <div><h3>Konflik Perubahan</h3><p>Data sudah diubah orang lain</p></div>
+    </div>
+    <div class="panel-body">
+      <p style="line-height:1.6;">
+        <b>${namaTerbaru}</b> baru saja diubah oleh <b>${siapa}</b> (${kapan}),
+        sementara Anda masih mengedit data yang sama. Perubahan Anda belum tersimpan.
+      </p>
+      <p style="line-height:1.6;color:var(--ink-soft);font-size:12.5px;">
+        Pilih <b>Timpa dengan Perubahan Saya</b> untuk tetap menyimpan versi Anda
+        (perubahan ${siapa} akan hilang), atau <b>Muat Ulang</b> untuk membatalkan
+        perubahan Anda dan melihat versi terbaru.
+      </p>
+    </div>
+    <div class="panel-footer">
+      <button class="btn btn-ghost" id="conflictDiscardBtn">Muat Ulang</button>
+      <button class="btn btn-primary" id="conflictOverwriteBtn">Timpa dengan Perubahan Saya</button>
+    </div>`;
+  document.getElementById('conflictDiscardBtn').onclick = () => { closeModal(); onDiscard(); };
+  document.getElementById('conflictOverwriteBtn').onclick = () => { closeModal(); onOverwrite(); };
+  document.getElementById('modalOverlay').classList.add('show');
 }
 
 /* ===== Tambah Pasangan ===== */
 function enterAddSpouseMode(id) {
+  if (!canEdit()) return;
   const romawi = ['I', 'II', 'III', 'IV'];
   const existingCount = (people[id].spouses || []).length;
   if (existingCount >= 4) { alert('Maksimal 4 pasangan per orang.'); return; }
@@ -399,6 +468,7 @@ function cancelAddSpouse(id) {
 
 /* ===== Tambah Anak ===== */
 function enterAddChildMode(parentId) {
+  if (!canEdit()) return;
   if (!parentId || !people[parentId]) { alert('Belum ada leluhur yang tercatat.'); return; }
   editingMode = true;
   const parent     = people[parentId];
@@ -483,6 +553,7 @@ function cancelAddChild() {
 
 /* ===== Tambah Ortu (Leluhur) ===== */
 function enterAddParentMode(targetId) {
+  if (!canAddRoot()) return;
   editingMode = true;
   const targetPerson = targetId ? people[targetId] : null;
   document.getElementById('detailPanel').innerHTML = `
@@ -563,6 +634,7 @@ function cancelAddParent() {
 
 /* ===== Hapus ===== */
 function enterDeleteMode(id) {
+  if (!canDelete()) return;
   editingMode = true;
   const p = people[id];
   const kids = childrenOf(id);
@@ -641,6 +713,25 @@ function cancelDelete(id) {
 /* ===== Modal kedua (Audit Log, Profil, Catatan, dsb.) ===== */
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('show');
+}
+
+/* Menutup seluruh popup/modal/panel yang mungkin sedang terbuka sekaligus:
+   panel Detail, modal sekunder (Statistik/Peta/Audit/Profil/Catatan/Konflik),
+   dropdown menu (Aksi/User), dan context menu klik-kanan.
+   Dipakai saat pengguna klik folder di sidebar, supaya tidak ada popup
+   yang "menggantung" di belakang navigasi baru.
+   skipSidebarRerender: true saat dipanggil dari dalam alur klik sidebar itu
+   sendiri, supaya tidak render dua kali (renderSidebar lalu render lagi). */
+function closeAllOverlays(skipSidebarRerender) {
+  closeModal();
+  editingMode = false;
+  document.getElementById('overlay').classList.remove('show');
+  document.removeEventListener('click', outsideClickCloseDetail, true);
+  highlightedId = null;
+  if (!skipSidebarRerender) renderSidebar();
+  closeDropdowns();
+  const ctx = document.getElementById('ctxMenu');
+  if (ctx) ctx.style.display = 'none';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -730,6 +821,7 @@ function runGlobalSearch(term) {
 
 /* ===== Tentukan Ibu/Ayah ===== */
 function openAssignParentModal(childId) {
+  if (!canEdit()) return;
   const child   = people[childId];
   if (!child) return;
   const primaryId = (child.parents || [])[0];
@@ -776,6 +868,7 @@ function saveAssignParent(childId, primaryId) {
 
 /* ===== Hapus Pasangan ===== */
 function openRemoveSpouseModal(personId, spouseId) {
+  if (!canEdit()) return;
   const person = people[personId], spouse = people[spouseId];
   if (!person || !spouse) return;
   const groups = getSpouseGroups(personId);
@@ -816,6 +909,7 @@ function confirmRemoveSpouse(personId, spouseId) {
 
 /* ===== Bulk Assign ===== */
 function openBulkAssignModal(personId, kidIds) {
+  if (!canEdit()) return;
   const person   = people[personId];
   const spouseIds = (person.spouses || []).filter(s => people[s]);
   if (!person || spouseIds.length < 2 || !kidIds.length) return;
@@ -886,9 +980,11 @@ function saveProfile() {
   const region = document.getElementById('f_prof_region').value.trim();
   if (!name) { alert('Nama wajib diisi.'); return; }
   const email = (db_auth && db_auth.currentUser) ? db_auth.currentUser.email : '';
-  currentUserProfile = { name, region, email };
+  const role  = (currentUserProfile && currentUserProfile.role) || 'editor';
+  currentUserProfile = { ...currentUserProfile, name, region, email, role };
   if (db_firestore && db_auth && db_auth.currentUser) {
-    db_firestore.collection('users').doc(db_auth.currentUser.uid).set(currentUserProfile)
+    // merge:true → field lain (termasuk "role") tidak ikut terhapus/tertimpa
+    db_firestore.collection('users').doc(db_auth.currentUser.uid).set(currentUserProfile, { merge: true })
       .catch(err => console.error('Gagal menyimpan profil:', err));
   }
   closeModal();
@@ -898,6 +994,7 @@ let auditCursor = null;
 const AUDIT_PAGE_SIZE = 50;
 
 function openAuditLog() {
+  if (!canEdit()) return;
   if (!db_firestore) { alert('Riwayat perubahan memerlukan Firestore.'); return; }
   auditCursor = null;
   document.getElementById('modalPanel').innerHTML = `
@@ -964,4 +1061,263 @@ function openCatatan() {
     <div class="panel-body"><p style="line-height:2.6;">${html}</p></div>
     <div class="panel-footer"><button class="btn btn-ghost" onclick="closeModal()">Tutup</button></div>`;
   document.getElementById('modalOverlay').classList.add('show');
+}
+
+/* ===== Statistik otomatis ===== */
+function countUniquePairs() {
+  const seen = new Set();
+  let count = 0;
+  Object.keys(people).forEach(id => {
+    (people[id].spouses || []).forEach(spId => {
+      if (!people[spId]) return;
+      const key = [id, spId].sort().join('|');
+      if (!seen.has(key)) { seen.add(key); count++; }
+    });
+  });
+  return count;
+}
+
+function getBirthdaysThisMonth() {
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const results = [];
+  Object.keys(people).forEach(id => {
+    const p = people[id];
+    if (p.death) return; // sudah wafat, lewati
+    const parsed = parseTglLengkap(p.birth);
+    if (!parsed) return;
+    if (parsed.m === curMonth) results.push({ id, name: p.name, day: parsed.d });
+  });
+  results.sort((a, b) => a.day - b.day);
+  return results;
+}
+
+function computeStatistik() {
+  const totalAnggota = Object.keys(people).length;
+  const totalGenerasi = totalGenerations();
+  const totalPasangan = countUniquePairs();
+  const ultahBulanIni = getBirthdaysThisMonth();
+  return { totalAnggota, totalGenerasi, totalPasangan, ultahBulanIni };
+}
+
+function openStatistik() {
+  const s = computeStatistik();
+  const bulanNama = BULAN_MASEHI[new Date().getMonth()];
+  const ultahHtml = s.ultahBulanIni.length
+    ? `<div class="statistik-ultah-list">${s.ultahBulanIni.map(u => `
+        <div class="statistik-ultah-row" data-id="${u.id}" onclick="closeModal(); navigateToPerson('${u.id}'); expanded.add('${u.id}'); render(); openDetail('${u.id}');">
+          <span class="statistik-ultah-day">${String(u.day).padStart(2,'0')}</span>
+          <span class="statistik-ultah-name">${escapeHtml(u.name)}</span>
+        </div>`).join('')}</div>`
+    : `<p class="audit-empty">Tidak ada ulang tahun bulan ini.</p>`;
+
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[1]}">📊</div>
+      <div><h3>Statistik Keluarga</h3><p>Ringkasan otomatis dari data pohon</p></div>
+    </div>
+    <div class="panel-body">
+      <div class="statistik-grid">
+        <div class="statistik-card">
+          <div class="statistik-num">${s.totalAnggota}</div>
+          <div class="statistik-label">Total Anggota</div>
+        </div>
+        <div class="statistik-card">
+          <div class="statistik-num">${s.totalGenerasi}</div>
+          <div class="statistik-label">Generasi</div>
+        </div>
+        <div class="statistik-card">
+          <div class="statistik-num">${s.totalPasangan}</div>
+          <div class="statistik-label">Pasangan</div>
+        </div>
+        <div class="statistik-card">
+          <div class="statistik-num">${s.ultahBulanIni.length}</div>
+          <div class="statistik-label">Ulang Tahun ${bulanNama}</div>
+        </div>
+      </div>
+      <div class="panel-section-title" style="margin-top:16px;">🎂 Ulang Tahun Bulan Ini</div>
+      ${ultahHtml}
+    </div>
+    <div class="panel-footer"><button class="btn btn-ghost" onclick="closeModal()">Tutup</button></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+/* ===== Peta persebaran keluarga (per kota/kabupaten domisili) ===== */
+function computePetaPersebaran() {
+  const counts = {};
+  Object.keys(people).forEach(id => {
+    const p = people[id];
+    if (p.death) return; // hanya yang masih hidup dihitung untuk domisili saat ini
+    const kota = (p.kabupaten || '').trim();
+    if (!kota) return;
+    counts[kota] = (counts[kota] || 0) + 1;
+  });
+  return Object.entries(counts)
+    .map(([kota, jumlah]) => ({ kota, jumlah }))
+    .sort((a, b) => b.jumlah - a.jumlah);
+}
+
+function openPetaPersebaran() {
+  const data = computePetaPersebaran();
+  const totalTercatat = data.reduce((sum, r) => sum + r.jumlah, 0);
+  const totalTanpaKota = Object.keys(people).filter(id => !people[id].death && !(people[id].kabupaten || '').trim()).length;
+  const maxJumlah = data.length ? data[0].jumlah : 0;
+
+  const rowsHtml = data.length
+    ? data.map(r => `
+        <div class="peta-row">
+          <span class="peta-kota">${escapeHtml(r.kota)}</span>
+          <div class="peta-bar-wrap"><div class="peta-bar" style="width:${maxJumlah ? (r.jumlah / maxJumlah * 100) : 0}%"></div></div>
+          <span class="peta-jumlah">${r.jumlah}</span>
+        </div>`).join('')
+    : `<p class="audit-empty">Belum ada data Kabupaten/Kota yang terisi.</p>`;
+
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[2]}">🗺️</div>
+      <div><h3>Peta Persebaran Keluarga</h3><p>Berdasarkan Kabupaten/Kota domisili</p></div>
+    </div>
+    <div class="panel-body">
+      <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">
+        ${totalTercatat} orang tercatat di ${data.length} kota/kabupaten
+        ${totalTanpaKota ? ` · ${totalTanpaKota} orang belum mengisi Kabupaten/Kota` : ''}
+      </p>
+      <div class="peta-list">${rowsHtml}</div>
+    </div>
+    <div class="panel-footer"><button class="btn btn-ghost" onclick="closeModal()">Tutup</button></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+/* ===== Reset Kata Sandi Pengguna (Admin) =====
+   Admin memilih seorang pengguna dari daftar, lalu aplikasi mengirim
+   email "reset password" resmi dari Firebase ke email pengguna tsb —
+   sama seperti tombol "Lupa kata sandi?" di halaman login, hanya saja
+   dipicu oleh admin, bukan oleh pengguna itu sendiri. Firebase Client
+   SDK tidak mengizinkan mengganti password orang lain secara langsung
+   tanpa melalui email konfirmasi ini. */
+async function openResetPasswordModal() {
+  if (!canResetPassword()) return;
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[3] || genColors[0]}">🔑</div>
+      <div><h3>Reset Kata Sandi Pengguna</h3><p>Kirim tautan reset ke email pengguna</p></div>
+    </div>
+    <div class="panel-body">
+      <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">Memuat daftar pengguna…</p>
+    </div>
+    <div class="panel-footer"><button class="btn btn-ghost" onclick="closeModal()">Tutup</button></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+
+  if (!db_firestore) {
+    document.querySelector('#modalPanel .panel-body').innerHTML =
+      `<p class="audit-empty">Firebase belum dikonfigurasi.</p>`;
+    return;
+  }
+
+  let users = [];
+  try {
+    const snap = await db_firestore.collection('users').get();
+    snap.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
+    users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  } catch (e) {
+    console.error('Gagal memuat daftar pengguna:', e);
+    document.querySelector('#modalPanel .panel-body').innerHTML =
+      `<p class="audit-empty">Gagal memuat daftar pengguna.</p>`;
+    return;
+  }
+
+  const rowsHtml = users.length
+    ? users.map(u => `
+        <div class="resetpw-row" data-uid="${escapeHtml(u.id)}">
+          <div class="resetpw-info">
+            <div class="resetpw-name">${escapeHtml(u.name || '(tanpa nama)')} <span class="resetpw-role">${escapeHtml(u.role || 'editor')}</span></div>
+            <div class="resetpw-email">${escapeHtml(u.email || '-')}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" ${u.email ? `onclick="sendResetPasswordTo('${escapeHtml(u.email)}', this)"` : 'disabled'}>Kirim Reset</button>
+        </div>`).join('')
+    : `<p class="audit-empty">Belum ada pengguna terdaftar.</p>`;
+
+  document.querySelector('#modalPanel .panel-body').innerHTML = `
+    <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">
+      Pilih pengguna untuk mengirim tautan reset kata sandi ke emailnya.
+    </p>
+    <div class="resetpw-list">${rowsHtml}</div>
+    <div id="resetpwFeedback" style="margin-top:10px;font-size:12.5px;"></div>`;
+}
+
+function sendResetPasswordTo(email, btnEl) {
+  if (!canResetPassword()) return;
+  const feedback = document.getElementById('resetpwFeedback');
+  btnEl.disabled = true;
+  btnEl.textContent = 'Mengirim…';
+  db_auth.sendPasswordResetEmail(email)
+    .then(() => {
+      btnEl.textContent = '✓ Terkirim';
+      if (feedback) {
+        feedback.style.color = 'var(--teal)';
+        feedback.textContent = `Tautan reset kata sandi telah dikirim ke ${email}.`;
+      }
+    })
+    .catch(err => {
+      btnEl.disabled = false;
+      btnEl.textContent = 'Kirim Reset';
+      if (feedback) {
+        feedback.style.color = '#B23A3A';
+        feedback.textContent = terjemahErrorAuth(err);
+      }
+    });
+}
+
+/* ===== Buku Tamu (lihat daftar pengunjung tanpa akun) =====
+   Hanya editor & admin yang boleh membaca collection guestbook
+   (ditegakkan juga di firestore.rules). Menampilkan nama, wilayah,
+   email, dan kapan tamu tsb membuka aplikasi. */
+async function openGuestbookViewer() {
+  if (!canEdit()) return;
+  document.getElementById('modalPanel').innerHTML = `
+    <div class="panel-header">
+      <div class="avatar" style="background:${genColors[0]}">📖</div>
+      <div><h3>Buku Tamu</h3><p>Pengunjung yang membuka tanpa akun</p></div>
+    </div>
+    <div class="panel-body">
+      <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">Memuat…</p>
+    </div>
+    <div class="panel-footer"><button class="btn btn-ghost" onclick="closeModal()">Tutup</button></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+
+  if (!db_firestore) {
+    document.querySelector('#modalPanel .panel-body').innerHTML =
+      `<p class="audit-empty">Firebase belum dikonfigurasi.</p>`;
+    return;
+  }
+
+  let entries = [];
+  try {
+    const snap = await db_firestore.collection('guestbook').orderBy('ts', 'desc').limit(100).get();
+    snap.forEach(doc => entries.push(doc.data()));
+  } catch (e) {
+    console.error('Gagal memuat buku tamu:', e);
+    document.querySelector('#modalPanel .panel-body').innerHTML =
+      `<p class="audit-empty">Gagal memuat buku tamu.</p>`;
+    return;
+  }
+
+  const rowsHtml = entries.length
+    ? entries.map(g => {
+        const contact = g.contact || g.email || '-';
+        const icon = g.contactType === 'phone' ? '📱' : '📧';
+        return `
+        <div class="audit-entry">
+          <div style="display:flex;justify-content:space-between;gap:8px;">
+            <b style="font-size:13px;">${escapeHtml(g.name || '(tanpa nama)')}</b>
+            <span style="font-size:11px;color:var(--ink-soft);flex-shrink:0;">${formatAuditTimestamp(g.ts)}</span>
+          </div>
+          <div style="font-size:12px;color:var(--ink-soft);">${escapeHtml(g.region || '-')} · ${icon} ${escapeHtml(contact)}</div>
+        </div>`;
+      }).join('')
+    : `<p class="audit-empty">Belum ada tamu yang tercatat.</p>`;
+
+  document.querySelector('#modalPanel .panel-body').innerHTML = `
+    <p style="margin:0 0 12px;color:var(--ink-soft);font-size:12px;">${entries.length} kunjungan tercatat (100 terbaru)</p>
+    <div>${rowsHtml}</div>`;
 }

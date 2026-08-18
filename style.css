@@ -73,6 +73,20 @@ body {
   padding: 0; display: block; margin-left: auto; margin-right: auto;
 }
 .login-error { color: #B23A3A; font-size: 12px; margin: -4px 0 10px; min-height: 14px; }
+.login-divider { border: none; border-top: 1px dashed var(--line-strong); margin: 16px 0 12px; }
+#guestViewBtn {
+  font-size: 12.5px;
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+#guestViewBtn:hover { background: #C08A5E; border-color: #C08A5E; }
+
+/* ===== MODE TAMU (PUBLIK, BACA SAJA) =====
+   Sembunyikan semua tombol yang memicu perubahan data. */
+.guest-mode .edit-only,
+.guest-mode .admin-only,
+.role-editor .admin-only { display: none !important; }
 
 /* ===== TOOLBAR ===== */
 .toolbar {
@@ -524,6 +538,55 @@ body {
 }
 .audit-loadmore:hover { background: #fff; }
 .audit-empty { font-size: 13px; color: var(--ink-soft); text-align: center; padding: 20px 0; }
+
+/* ===== STATISTIK ===== */
+.statistik-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+}
+.statistik-card {
+  background: var(--paper-card); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 10px; text-align: center;
+}
+.statistik-num {
+  font-family: 'Fraunces', serif; font-size: 26px; font-weight: 700; color: var(--teal);
+  line-height: 1.1;
+}
+.statistik-label { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
+.statistik-ultah-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.statistik-ultah-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 6px;
+  border-bottom: 1px dashed var(--line); cursor: pointer; border-radius: 6px;
+}
+.statistik-ultah-row:last-child { border-bottom: none; }
+.statistik-ultah-row:hover { background: var(--teal-light-grad); }
+.statistik-ultah-day {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #fff;
+  background: var(--sogan); border-radius: 6px; padding: 2px 7px; flex-shrink: 0;
+}
+.statistik-ultah-name { font-size: 13px; }
+
+/* ===== PETA PERSEBARAN ===== */
+.peta-list { display: flex; flex-direction: column; gap: 8px; }
+.peta-row { display: flex; align-items: center; gap: 10px; }
+.peta-kota { font-size: 12.5px; width: 110px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peta-bar-wrap { flex: 1; height: 10px; background: var(--line); border-radius: 6px; overflow: hidden; }
+.peta-bar { height: 100%; background: var(--teal); border-radius: 6px; min-width: 3px; }
+.peta-jumlah { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-soft); width: 28px; text-align: right; flex-shrink: 0; }
+
+/* ===== RESET KATA SANDI (ADMIN) ===== */
+.resetpw-list { display: flex; flex-direction: column; gap: 2px; }
+.resetpw-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px dashed var(--line);
+}
+.resetpw-row:last-child { border-bottom: none; }
+.resetpw-info { min-width: 0; }
+.resetpw-name { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.resetpw-role {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  background: var(--teal-light-grad); color: var(--teal); border-radius: 8px; padding: 1px 6px;
+}
+.resetpw-email { font-size: 11.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Catatan */
 .catatan-name {
