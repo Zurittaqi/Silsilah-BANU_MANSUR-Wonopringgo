@@ -317,16 +317,12 @@ async function ensureSeedData(people, rootIds) {
 /* ===== Audit Log ===== */
 function logAudit(action, personId, summary, changes, userProfile, currentUser) {
   if (!db_firestore) return;
-  const safeName = (userProfile && userProfile.name) ? userProfile.name : null;
-  const safeRegion = (userProfile && userProfile.region) ? userProfile.region : null;
-  const safeEmail = (currentUser && currentUser.email) ? currentUser.email : null;
-  const displayName = safeName
-    ? (safeRegion ? `${safeName} (${safeRegion})` : safeName)
-    : (safeEmail || 'Tidak diketahui');
-  const safeUid = (currentUser && currentUser.uid) ? currentUser.uid : null;
+  const displayName = userProfile
+    ? (userProfile.region ? `${userProfile.name} (${userProfile.region})` : userProfile.name)
+    : (currentUser ? currentUser.email : 'Tidak diketahui');
   const entry = {
     ts: firebase.firestore.FieldValue.serverTimestamp(),
-    userId: safeUid,
+    userId: currentUser ? currentUser.uid : null,
     userName: displayName,
     action,
     personId: personId || null,

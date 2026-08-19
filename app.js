@@ -39,12 +39,7 @@ function doLogin() {
     if (!name) { errBox.textContent = 'Nama Anda wajib diisi.'; return; }
     db_auth.createUserWithEmailAndPassword(email, password)
       .then(cred => {
-        if (db_firestore) return db_firestore.collection('users').doc(cred.user.uid).set({
-          name, region, email,
-          role: 'publik',
-          pendingApproval: true,
-          registeredAt: firebase.firestore.FieldValue.serverTimestamp(),
-        });
+        if (db_firestore) return db_firestore.collection('users').doc(cred.user.uid).set({ name, region, email, role: 'editor' });
       })
       .catch(err => { errBox.textContent = terjemahErrorAuth(err); });
   } else {
@@ -92,13 +87,12 @@ function terjemahErrorAuth(err) {
 }
 
 async function loadUserProfile(uid, fallbackEmail) {
-  const fallback = { name: fallbackEmail.split('@')[0], region: '', email: fallbackEmail, role: 'publik' };
+  const fallback = { name: fallbackEmail.split('@')[0], region: '', email: fallbackEmail, role: 'editor' };
   if (!db_firestore) { currentUserProfile = fallback; return; }
   try {
     const doc = await db_firestore.collection('users').doc(uid).get();
     currentUserProfile = doc.exists ? doc.data() : fallback;
-    // Akun lama (sebelum sistem role) yang tidak punya field role → anggap editor (migrasi aman)
-    if (!currentUserProfile.role) currentUserProfile.role = 'editor';
+    if (!currentUserProfile.role) currentUserProfile.role = 'editor'; // akun lama sebelum sistem role ada
   } catch (e) {
     console.error('Gagal memuat profil:', e);
     currentUserProfile = fallback;
@@ -131,29 +125,6 @@ function applyRoleClassToBody() {
   const r = currentRole();
   document.body.classList.toggle('guest-mode',  r === 'publik');
   document.body.classList.toggle('role-editor', r === 'editor');
-}
-
-function showPendingBanner() {
-  let banner = document.getElementById('pendingBanner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'pendingBanner';
-    banner.innerHTML = `
-      <span>⏳ Akun Anda sedang menunggu persetujuan Admin. Saat ini Anda hanya bisa melihat data (baca saja).</span>
-      <button onclick="doLogout()" style="margin-left:12px;background:rgba(0,0,0,.15);border:none;border-radius:4px;padding:2px 10px;cursor:pointer;color:inherit;font-size:12px;">Keluar</button>`;
-    const appRoot = document.getElementById('appRoot');
-    appRoot.insertBefore(banner, appRoot.firstChild);
-  }
-  banner.style.display = 'flex';
-}
-
-function hidePendingBanner() {
-  const banner = document.getElementById('pendingBanner');
-  if (banner) banner.style.display = 'none';
-}
-
-function isPendingApproval() {
-  return !!(currentUserProfile && currentUserProfile.pendingApproval === true);
 }
 
 function showGuestbookForm() {
@@ -268,12 +239,6 @@ if (db_auth) {
       await loadUserProfile(user.uid, user.email);
       applyRoleClassToBody();
       refreshSaveStatus();
-      if (isPendingApproval()) {
-        showPendingBanner();
-      } else {
-        hidePendingBanner();
-        if (currentRole() === 'admin') updatePendingBadge();
-      }
       bootApp();
     } else {
       stopRealtimeSync();
@@ -569,5 +534,57 @@ document.addEventListener('DOMContentLoaded', () => {
     resizer.addEventListener('dblclick', () =>
       document.documentElement.style.removeProperty('--sidebar-w')
     );
+  })();
+
+  /* ===== Geser (drag-to-scroll) isi sidebar pohon keluarga =====
+     Klik-tahan lalu seret untuk menggeser isi sidebar ke segala arah
+     (vertikal & horizontal), tanpa zoom — murni memindahkan posisi
+     scroll. Klik singkat tanpa gerak berarti tetap dianggap klik biasa
+     (navigasi ke orang/folder), bukan drag. */
+  (function initSidebarDragScroll() {
+    const box = document.querySelector('.sidebar');
+    if (!box) return;
+    const DRAG_THRESHOLD = 6; // px — di bawah ini masih dianggap "klik", bukan drag
+    let dragging = false, moved = false;
+    let startX = 0, startY = 0, startScrollL = 0, startScrollT = 0;
+
+    function pointerDown(e) {
+      if (e.button !== undefined && e.button !== 0) return; // hanya klik kiri mouse
+      if (e.target.closest('.sidebar-header')) return; // jangan ganggu tombol collapse/expand-all
+      dragging = true; moved = false;
+      const p = e.touches ? e.touches[0] : e;
+      startX = p.clientX; startY = p.clientY;
+      startScrollL = box.scrollLeft; startScrollT = box.scrollTop;
+    }
+    function pointerMove(e) {
+      if (!dragging) return;
+      const p = e.touches ? e.touches[0] : e;
+      const dx = p.clientX - startX, dy = p.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        moved = true;
+        box.classList.add('sidebar-dragging');
+      }
+      if (moved) {
+        if (e.cancelable) e.preventDefault();
+        box.scrollLeft = startScrollL - dx;
+        box.scrollTop  = startScrollT - dy;
+      }
+    }
+    function pointerUp(e) {
+      if (moved) {
+        // Cegah klik "hantu" yang menavigasi ke node tepat setelah drag selesai
+        const suppressClick = ev => { ev.stopPropagation(); box.removeEventListener('click', suppressClick, true); };
+        box.addEventListener('click', suppressClick, true);
+      }
+      dragging = false; moved = false;
+      box.classList.remove('sidebar-dragging');
+    }
+
+    box.addEventListener('mousedown', pointerDown);
+    document.addEventListener('mousemove', pointerMove);
+    document.addEventListener('mouseup', pointerUp);
+    box.addEventListener('touchstart', pointerDown, { passive: true });
+    box.addEventListener('touchmove', pointerMove, { passive: false });
+    box.addEventListener('touchend', pointerUp);
   })();
 });
