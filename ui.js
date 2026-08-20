@@ -139,7 +139,7 @@ function buildSpouseGroupNode(personId, group, depth = 1) {
   row.innerHTML = `
     <span class="twisty" ${indent}>${isOpen ? '▾' : '▸'}</span>
     <span class="folder-ico">${group.ambiguous ? '⚠️' : '💍'}</span>
-    <span class="tree-name">${escapeHtml(group.ambiguous ? group.label : 'Bersama ' + group.label)}</span>
+    <span class="tree-name">${escapeHtml(group.ambiguous ? group.label : 'menikah dengan ' + group.label)}</span>
     <span class="tree-badge">${group.kids.length}</span>`;
 
   row.onclick = e => {
