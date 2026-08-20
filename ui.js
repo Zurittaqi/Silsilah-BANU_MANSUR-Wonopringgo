@@ -452,6 +452,7 @@ function saveAddSpouse(id) {
     kecamatan: val('f_sp_kecamatan'), desa: val('f_sp_desa'), rtrw: val('f_sp_rtrw'),
     phone: val('f_sp_phone'), email: val('f_sp_email'), mapsUrl: val('f_sp_maps'),
   };
+  if (!people[id].spouses) people[id].spouses = [];
   people[id].spouses.push(newId);
   editingMode = false;
   savePersonToDB(newId, people[newId]);
