@@ -199,7 +199,7 @@ async function savePersonToDB(id, data, actorProfile, actorUser) {
   await idbPutPerson(id, payload).catch(e => console.warn('IndexedDB write gagal:', e));
   // 2. Kirim ke Firebase (async, bisa gagal kalau offline)
   if (db_firestore) {
-    trackSave(db_firestore.collection('people').doc(id).set(payload)).catch(() => {});
+    trackSave(db_firestore.collection('people').doc(id).set(payload));
   }
   return payload;
 }
