@@ -314,7 +314,7 @@ function renderContent() {
   heading.onclick     = () => openDetail(currentId);
 
   if (person.spouses.length) {
-    pairLabel.innerHTML = 'bersama ' + person.spouses.map(sid =>
+    pairLabel.innerHTML = 'menikah dengan  ' + person.spouses.map(sid =>
       `<span class="spouse-link" data-open="${sid}">${escapeHtml(people[sid].name)}</span>`
     ).join(' &amp; ');
     pairLabel.querySelectorAll('.spouse-link').forEach(el => {
