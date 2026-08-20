@@ -438,7 +438,7 @@ function enterAddSpouseMode(id) {
   panel.appendChild(footer);
 }
 
-function saveAddSpouse(id) {
+async function saveAddSpouse(id) {
   if ((people[id].spouses || []).length >= 4) { alert('Maksimal 4 pasangan.'); return; }
   const val   = sel => { const el = document.getElementById(sel); return el ? el.value.trim() : ''; };
   const name  = val('f_sp_name');
@@ -455,8 +455,8 @@ function saveAddSpouse(id) {
   if (!people[id].spouses) people[id].spouses = [];
   people[id].spouses.push(newId);
   editingMode = false;
-  savePersonToDB(newId, people[newId]);
-  savePersonToDB(id,    people[id]);
+  await savePersonToDB(newId, people[newId]);
+  await savePersonToDB(id,    people[id]);
   logAudit('add', newId, `Menambah pasangan: ${name} (untuk ${people[id].name})`, [], currentUserProfile, db_auth?.currentUser);
   openDetail(id);
   render();
